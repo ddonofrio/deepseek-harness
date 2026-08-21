@@ -2,6 +2,8 @@
 
 [English](2026-08-21-recovery-prompts-use-agent-role.md) | 中文
 
+恢复生产者角色已由 [Recovery prompts follow provider role sequencing](2026-08-21-recovery-prompts-follow-provider-role-sequencing.zh.md) 取代。
+
 Status: implemented
 
 ## Problem

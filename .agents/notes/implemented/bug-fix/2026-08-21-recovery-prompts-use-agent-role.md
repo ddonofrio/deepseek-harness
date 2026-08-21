@@ -4,6 +4,8 @@ Status: implemented
 
 English | [中文](2026-08-21-recovery-prompts-use-agent-role.zh.md)
 
+The recovery-producer role is superseded by [Recovery prompts follow provider role sequencing](2026-08-21-recovery-prompts-follow-provider-role-sequencing.md).
+
 ## Problem
 
 Loop-detection and output-token recovery prompts are queued through the agent inbox as user-role messages, so the model can interpret an automatic continuation as a new human request.

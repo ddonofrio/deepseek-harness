@@ -56,7 +56,7 @@ export const TOKEN_LIMIT_HANDLER_SETTINGS_SCHEMA: z<TokenLimitHandlerSettings> =
 })
 
 /** Source stamped on prompts this policy sends to the model. */
-const PLUGIN_SOURCE: MessageSource = { kind: 'plugin', plugin: 'token-limit-handler', modelRole: 'assistant' }
+const PLUGIN_SOURCE: MessageSource = { kind: 'plugin', plugin: 'token-limit-handler' }
 
 /** Validate values the schema cannot accept conditionally. */
 function validateSettings(settings: TokenLimitHandlerSettings): void {
