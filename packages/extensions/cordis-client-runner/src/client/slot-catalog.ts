@@ -1316,6 +1316,7 @@ export const CLIENT_SLOT_API: readonly ClientSlotEntry[] = [
       'client-ui-permission-presets PermissionRow id \'permission\'',
       'client-ui-settings-plugins LoopDetectionRow id \'agent-loop-detection\'',
       'client-ui-settings-plugins TokenLimitHandlerRow id \'token-limit-handler\'',
+      'client-ui-settings-plugins CompletionCheckerRow id \'completion-checker\'',
       'client-ui-theme AppearanceRow id \'appearance\'',
     ],
     replaceRisk: 'none',

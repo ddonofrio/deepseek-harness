@@ -13,6 +13,7 @@ import {
 } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { ConfigurablePluginsTabController } from '../src/client/tab-store.ts'
 import { TokenLimitHandlerRowController, type TokenLimitHandlerSettings } from '../src/client/token-limit-handler-controller.ts'
+import { CompletionCheckerRowController, type CompletionCheckerSettings } from '../src/client/completion-checker-controller.ts'
 import { WebSearchCardController, type WebSearchSettings } from '../src/client/web-search-card-controller.ts'
 
 /** Make the stub behave like a Host that accepts every write. */
@@ -411,6 +412,27 @@ describe('TokenLimitHandlerRowController', () => {
       ['action', 'custom-prompt'],
       ['customPrompt', 'finish in fewer words'],
     ])
+  })
+})
+
+describe('CompletionCheckerRowController', () => {
+  it('projects the enabled default and saves the toggle', async () => {
+    const host = stubSettingsScope<CompletionCheckerSettings>()
+    acceptWrites(host)
+    const controller = new CompletionCheckerRowController(host.scope)
+    host.publish({
+      status: 'ready',
+      writable: true,
+      value: { enabled: true },
+      base: { enabled: true },
+      user: {},
+    })
+    const face = controller.inject()
+
+    expect(face.hooks.completionChecker.getSnapshot()).toMatchObject({ enabled: { text: 'on' } })
+    face.edit('enabled', 'off')
+    face.save()
+    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledWith('enabled', false) })
   })
 })
 

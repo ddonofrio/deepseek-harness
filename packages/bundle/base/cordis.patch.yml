@@ -399,6 +399,12 @@
         action: continue
         continueCount: 5
 
+    - id: completion-checker
+      name: '@deepseek-ai/dsh-completion-checker'
+      config:
+        enabled: true
+        provider: fork
+
     # Every mode enables the stable model-facing web_search tool. DeepSeek search
     # resolves the same DEEPSEEK_API_KEY credential the Models page manages for
     # chat, at each search; its Messages endpoint is separate from the

@@ -109,6 +109,16 @@ describe('ui-settings-plugins apply', () => {
     expect(row?.options).toMatchObject({ id: 'token-limit-handler', order: 40 })
   })
 
+  it('registers Double-check results in General after token-limit recovery', async () => {
+    const { ctx, slots } = await bench()
+    declareRoot(slots)
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    const row = slots.entries('settings.general.item').find(entry => entry.options.id === 'completion-checker')
+    expect(row?.options).toMatchObject({ id: 'completion-checker', order: 50 })
+  })
+
 
   it('injects a live tab projection, the card directory, and one business face per card', async () => {
     const { ctx, slots } = await bench()

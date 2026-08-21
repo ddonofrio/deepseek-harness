@@ -17,12 +17,19 @@ export type PluginsSettingsLocaleKey =
   | 'tokenLimitHandlerActionHint' | 'tokenLimitHandlerContinue' | 'tokenLimitHandlerStop'
   | 'tokenLimitHandlerCustom' | 'tokenLimitHandlerContinueCount' | 'tokenLimitHandlerContinueCountHint'
   | 'tokenLimitHandlerCustomPrompt' | 'tokenLimitHandlerCustomPromptHint'
+  | 'completionCheckerTitle' | 'completionCheckerDescription' | 'completionCheckerEnabled'
+  | 'completionCheckerOn' | 'completionCheckerOff'
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
 
 /** English copy. */
 export const en: Record<PluginsSettingsLocaleKey, string> = {
+  completionCheckerTitle: 'Double-check results',
+  completionCheckerDescription: 'Ask a second agent to verify that the request is fully complete before stopping.',
+  completionCheckerEnabled: 'Double-check results',
+  completionCheckerOn: 'On',
+  completionCheckerOff: 'Off',
   nav: 'Plugins',
   title: 'Plugins',
   intro: 'Configure and inspect the plugins installed in this deployment.',
@@ -91,6 +98,11 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
 
 /** Simplified Chinese copy. */
 export const zh: Record<PluginsSettingsLocaleKey, string> = {
+  completionCheckerTitle: '复核结果',
+  completionCheckerDescription: '停止前让第二个 agent 检查请求是否已经完整完成。',
+  completionCheckerEnabled: '复核结果',
+  completionCheckerOn: '开',
+  completionCheckerOff: '关',
   nav: '插件',
   title: '插件',
   intro: '配置和查看本部署已安装的插件。',

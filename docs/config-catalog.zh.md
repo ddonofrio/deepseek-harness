@@ -541,6 +541,22 @@ export interface ToolResultPruneConfig {
 
 来源：[`packages/compaction/compaction-tool-result-pruner/src/types.ts:4`](../packages/compaction/compaction-tool-result-pruner/src/types.ts)
 
+<a id="deepseek-aidsh-completion-checker"></a>
+
+## `@deepseek-ai/dsh-completion-checker`
+
+```ts config-catalog
+/** Plugin configuration. */
+export interface Config {
+  /** Whether reviews are enabled by default. */
+  enabled?: boolean
+  /** Registry name of the one-shot subagent provider used for reviews. */
+  provider?: string
+}
+```
+
+来源：[`packages/guard/completion-checker/src/index.ts:26`](../packages/guard/completion-checker/src/index.ts)
+
 <a id="deepseek-aidsh-cordis-host-runner"></a>
 
 ## `@deepseek-ai/dsh-cordis-host-runner`
