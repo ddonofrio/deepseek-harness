@@ -235,6 +235,10 @@ describe('agent loop', () => {
           : undefined
       },
     })
+    const errors: unknown[] = []
+    ctx.on('agent/error', ({ agent: subject, error }) => {
+      if (subject === agent) errors.push(error)
+    })
 
     send(agent, 'answer this')
     await agent.whenIdle()
@@ -255,12 +259,13 @@ describe('agent loop', () => {
     const turnEnds = agent.session.events.filter(event => event.type === 'turn/end')
     expect(turnEnds[0]).toMatchObject({
       type: 'turn/end',
-      data: { turn: 1, reason: { kind: 'error', error: { code: 'LLM_LOOP' } } },
+      data: { turn: 1, reason: { kind: 'completed' } },
     })
     expect(agent.session.events.at(-1)).toMatchObject({
       type: 'turn/end',
       data: { turn: 2, reason: { kind: 'completed' } },
     })
+    expect(errors).toEqual([])
   })
 
   it('keeps the loop failure when compaction has no useful range', async () => {

@@ -10,7 +10,7 @@ Status: implemented
 
 ## 决策
 
-`LoopDetectionOptions.compactBeforeFailing` 与 General 设置 `loopDetectionCompactBeforeFailing` 的默认值都是 `false`。启用后，第四次连续检测会保存当前轮次领取的消息，以循环错误结束该轮，并将恢复延迟到 driver 进入 idle。随后 agent 调用压缩提供方的 `compactNow` 路径；这与 `/compact` 使用相同的 idle 维护操作，唤醒输入会在操作完成前保留在队列中。结果非 `null` 时，保存的消息会被放到 `next-turn` 的队首，在新的轮次中重新派发；原始用户输入被领取后，连续循环计数会重置。缺少压缩服务、结果为 `null` 或后端报错时不会伪造恢复，循环错误或后端错误保持终止。
+`LoopDetectionOptions.compactBeforeFailing` 与 General 设置 `loopDetectionCompactBeforeFailing` 的默认值都是 `false`。启用后，第四次连续检测会保存当前轮次领取的消息，将该轮次作为内部恢复边界结束，并将恢复延迟到 driver 进入 idle。随后 agent 调用压缩提供方的 `compactNow` 路径；这与 `/compact` 使用相同的 idle 维护操作，唤醒输入会在操作完成前保留在队列中。结果非 `null` 时，保存的消息会被放到 `next-turn` 的队首，在新的轮次中重新派发；原始用户输入被领取后，连续循环计数会重置。恢复成功时不会发出中间循环错误；缺少压缩服务、结果为 `null` 或后端报错时才报告终止错误。
 
 压缩 seam 仍将 `loop-detection` 与压力和提供方确认的上下文溢出分开命名，用于直接的自动策略。这里的恢复路径有意改用 `compactNow`，因为它必须共享显式命令的 idle 会话生命周期。
 

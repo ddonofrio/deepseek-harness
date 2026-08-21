@@ -403,10 +403,9 @@ export class ReactLoopAgent implements Agent {
         throw error
       }
       if (error instanceof LoopCompactionRequested) {
-        turnEnds = {
-          kind: 'error',
-          error: { message: 'LLM in infinite loop.', code: 'LLM_LOOP' },
-        }
+        // This is an internal turn boundary for recovery, not a terminal
+        // failure. The compaction result decides whether recovery succeeds.
+        turnEnds = { kind: 'completed' }
         return false
       }
       // Every failure is structured: an `LlmError` keeps its facts, anything
