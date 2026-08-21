@@ -422,7 +422,8 @@ export class ReactLoopAgent implements Agent {
           this.consecutiveLoopDetections += 1
           if (this.consecutiveLoopDetections >= 4) {
             if (this.loopDetection.compactBeforeFailing) {
-              const compaction = this.loopCtx.get('compaction')
+              // Web presets provide compaction in the agent scope, not the host.
+              const compaction = this.ctx.get('compaction')
               if (compaction !== undefined) {
                 const compacted = await compaction.compactIfNeeded(this, 'loop-detection', signal) !== null
                 signal.throwIfAborted()

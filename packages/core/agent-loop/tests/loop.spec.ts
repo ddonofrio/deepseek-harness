@@ -215,12 +215,13 @@ describe('agent loop', () => {
       textResponse('recovered'),
     ])
     const ctx = await harness(adapter)
-    const compaction = new LoopCompactionEngine(ctx)
     const agent = ctx.agentLoop.create(SessionId('llm-loop-compact-before-failing'), {
       provider: 'mock',
       model: 'mock',
       loopDetection: { enabled: true, compactBeforeFailing: true },
     })
+    // Web presets mount compaction beneath the agent scope rather than at the host.
+    const compaction = new LoopCompactionEngine(agent.ctx)
 
     send(agent, 'answer this')
     await waitForIdle(ctx, agent)
