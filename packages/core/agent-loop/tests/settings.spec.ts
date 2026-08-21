@@ -83,6 +83,21 @@ describe('agent-loop settings section', () => {
     await bench.ctx.fiber.dispose()
   })
 
+  it('defaults the minimum repeated-token threshold to 16', async () => {
+    const bench = await boot()
+
+    const descriptor = bench.ctx.settings.describe().find(row => String(row.ns) === 'agent-loop')
+    expect((descriptor?.value as { loopDetectionMinTokens: number }).loopDetectionMinTokens).toBe(16)
+
+    const agent = bench.ctx.agentLoop.create(SessionId('default-loop-threshold'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true },
+    })
+    expect(agent.options.loopDetection?.minTokens).toBe(16)
+    await bench.ctx.fiber.dispose()
+  })
+
   it('keeps serving the composed agents array to its own consumers', async () => {
     const bench = await boot()
 

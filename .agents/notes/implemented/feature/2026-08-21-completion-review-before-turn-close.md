@@ -10,15 +10,15 @@ An agent can stop after producing a plausible answer while leaving a requested v
 
 ## Decision
 
-`@deepseek-ai/dsh-completion-checker` listens to `agent/turn-stopping` for normal completed turns and starts a one-shot `fork` subagent with structured output. The fork inherits the closed conversation prefix and receives the current turn's event log in its review prompt, because the current turn has not yet appended `turn/end` at the checkpoint.
+`@deepseek-ai/dsh-completion-checker` registers a model-visible `completion_check` tool. The tool starts a one-shot `fork` subagent with structured output inside the parent model step. The fork inherits the closed conversation prefix and receives the current turn's event log in its review prompt. The terminal listener no longer starts a child; it only requires a check before an unchecked completed turn can close and requires another check after an incomplete result.
 
-The review protocol is `{ status: 'complete' | 'incomplete'; message: string }`. The plugin first records a visible `Double-checking results before stopping…` plugin notice so the parent UI shows the review interval. An incomplete result must contain an actionable message; the plugin records that message as a plugin-sourced `user/message` and calls `agent.steer()` before the turn closes. Complete, invalid, failed, aborted, and non-completed reviews leave the original terminal decision unchanged. The reviewer run is disposed after settlement, its local child is marked ephemeral so it is neither persisted nor exposed through session listings, and an active-agent set prevents recursive reviews.
+The review protocol is `{ status: 'complete' | 'incomplete' | 'unavailable'; message: string }`. Before a final answer, the parent calls `completion_check`; the tool waits for the structured reviewer result, disposes the reviewer, and returns a visible verdict. `complete` shows that the request is complete, while `incomplete` returns the requested changes to the parent, which must address them and call the tool again. If structured output is missing, the checker retries with a stricter protocol instruction up to the configured bounded attempt limit, disposing each failed run before retrying. After that limit, `unavailable` reports the failure and fails open for the current turn; later calls in that turn reuse the result instead of starting another reviewer loop. The reviewer is a visible one-shot child so it appears in subagent listings while running and remains inspectable when persistence is enabled; it is disposed before the tool returns. Nested agents cannot invoke the checker, so validation cannot recurse.
 
-The `completion-checker` settings namespace exposes `enabled`, defaults it to `true`, and applies it live. The provider name remains composition configuration and defaults to `fork`, which is mounted by the base bundle.
+The `completion-checker` settings namespace exposes `enabled`, defaults it to `true`, and applies it live. The provider name and bounded `maxAttempts` retry budget remain composition configuration; they default to `fork` and `2`, respectively. The base bundle mounts the `fork` provider.
 
 ## Alternatives considered
 
-**Wait for `turn/end` and then start the review.** Rejected because the post-boundary event cannot synchronously participate in the current turn's close decision; an incomplete review would need a separate wake-up policy and could race user input.
+**Start the review from `agent/turn-stopping`.** Rejected because the terminal checkpoint is an awaited hidden side effect: a provider or child lifecycle delay can leave the parent showing a checking notice without a visible model request. A model-visible tool call keeps the review inside an observable model step and gives the tool result to the parent directly.
 
 **Use the ordinary fresh `spawn` provider.** Rejected because a fresh child cannot inspect the inherited conversation without duplicating the complete history in the prompt; the fork provider preserves the parent context and the current-turn supplement only covers the not-yet-closed suffix.
 
@@ -26,8 +26,8 @@ The `completion-checker` settings namespace exposes `enabled`, defaults it to `t
 
 ## Consequences
 
-The user may see one additional agent step when the reviewer finds missing work, while the review itself remains a child activity rather than a second assistant answer in the parent transcript. Review failures do not block a response, so the feature improves completeness opportunistically and does not become a new provider availability requirement after composition succeeds.
+The user sees the `completion_check` tool call and its pending/result lifecycle, while the review remains a child activity rather than a second assistant answer in the parent transcript. An incomplete result makes the parent continue and repeat the tool call after its changes. Review failures do not block a response, so the feature improves completeness opportunistically and does not become a new provider availability requirement after composition succeeds.
 
-The reviewer inherits the parent's tools and may use them to verify claims. Recursive checking is suppressed by tracking the parent and reviewer agent identities in memory; this state is intentionally not durable because it coordinates one live terminal checkpoint only.
+The reviewer inherits the parent's tools and may use them to verify claims, except for `completion_check`, which is removed from its scoped tool view. Nested agents do not receive the completion policy and the terminal guard ignores them, so validation cannot recurse. The terminal guard keeps only the latest review status per live parent and does not persist that coordination state.
 
 The current-turn supplement is a bounded event summary rather than a lossless log, so large tool results cannot exhaust the reviewer's context. Only the agent-loop's automatic compaction notice is excluded from completion review; the third loop-retry prompt is reviewed after the model answers it.

@@ -1,8 +1,8 @@
-/** Review a completed agent turn and continue it when the review finds unfinished work.
+/** Expose a visible completion review and continue the parent when it finds unfinished work.
  *
- * The reviewer is a forked one-shot subagent. Forked history contains the
- * completed conversation prefix; this plugin also includes the turn currently
- * at `agent/turn-stopping`, because that turn has not reached `turn/end` yet.
+ * The reviewer is a forked one-shot subagent launched by a model-visible tool.
+ * Forked history contains the completed conversation prefix; the tool prompt
+ * also includes the current turn because that turn has not reached `turn/end`.
  *
  * @module @deepseek-ai/dsh-completion-checker
  */
@@ -15,7 +15,8 @@ import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, TurnEndReason } from '@deepseek-ai/dsh-session'
 import type { SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
-import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
+import type { ObjectJsonSchema, ToolDefinition } from '@deepseek-ai/dsh-tools'
+import type {} from '@deepseek-ai/dsh-system-prompt'
 
 /** User-selectable completion-review settings. */
 export interface CompletionCheckerSettings {
@@ -29,6 +30,8 @@ export interface Config {
   enabled?: boolean
   /** Registry name of the one-shot subagent provider used for reviews. */
   provider?: string
+  /** Maximum number of reviewer attempts when structured output is missing. */
+  maxAttempts?: number
 }
 
 /** Settings namespace exposed on the General settings surface. */
@@ -40,10 +43,16 @@ export const DEFAULT_COMPLETION_CHECKER_ENABLED = true
 /** The default provider, which inherits the parent's completed conversation. */
 export const DEFAULT_COMPLETION_CHECKER_PROVIDER = 'fork'
 
+/** The default bounded retry budget for a reviewer protocol recovery. */
+export const DEFAULT_COMPLETION_CHECKER_MAX_ATTEMPTS = 2
+
+const MAX_COMPLETION_CHECKER_ATTEMPTS = 3
+
 /** Schema for the plugin's composition configuration. */
 export const Config: z<Config> = z.object({
   enabled: z.boolean().default(DEFAULT_COMPLETION_CHECKER_ENABLED),
   provider: z.string().default(DEFAULT_COMPLETION_CHECKER_PROVIDER),
+  maxAttempts: z.number().step(1).min(1).max(MAX_COMPLETION_CHECKER_ATTEMPTS).default(DEFAULT_COMPLETION_CHECKER_MAX_ATTEMPTS),
 })
 
 /** Schema for the user-owned settings section. */
@@ -54,21 +63,21 @@ export const COMPLETION_CHECKER_SETTINGS_SCHEMA: z<CompletionCheckerSettings> = 
 /** Source stamped on review messages sent back to the parent agent. */
 const PLUGIN_SOURCE: Extract<MessageSource, { kind: 'plugin' }> = { kind: 'plugin', plugin: 'completion-checker' }
 
-/** Load after the subagent registry so the review provider is available. */
-export const inject = ['subagents']
+/** Load with tools and system-prompt services; the review provider may appear later. */
+export const inject = ['subagents', 'tools', 'systemPrompt']
 
 /** Structured result required from the completion reviewer. */
 const COMPLETION_REVIEW_SCHEMA: ObjectJsonSchema = {
   type: 'object',
   properties: {
-    status: { type: 'string', enum: ['complete', 'incomplete'] },
+    status: { type: 'string', enum: ['complete', 'incomplete', 'unavailable'] },
     message: { type: 'string' },
   },
   required: ['status', 'message'],
   additionalProperties: false,
 }
 
-type CompletionReview = { status: 'complete' | 'incomplete'; message: string }
+type CompletionReview = { status: 'complete' | 'incomplete' | 'unavailable'; message: string }
 
 const REVIEW_PROMPT_MAX_CHARS = 12000
 const REVIEW_BLOCK_MAX_CHARS = 2000
@@ -166,6 +175,11 @@ function isLoopRecoveryTurn(events: readonly SessionEvent[]): boolean {
     && event.data.source.summary === 'compacting after repeated loop')
 }
 
+/** Identify nested agents, which do not run the top-level completion policy. */
+function isNestedAgent(agent: Agent): boolean {
+  return agent.session.header.parentSession !== undefined
+}
+
 /** Prompt the reviewer to validate the user's request and the current turn. */
 function reviewPrompt(agent: Agent, turn: number): string {
   const serialized = JSON.stringify(compactReviewEvents(currentTurnEvents(agent, turn)))
@@ -185,6 +199,18 @@ function reviewPrompt(agent: Agent, turn: number): string {
   ].join('\n')
 }
 
+/** Add a protocol-recovery instruction after an attempt omitted structured output. */
+function reviewAttemptPrompt(agent: Agent, turn: number, attempt: number): string {
+  const prompt = reviewPrompt(agent, turn)
+  if (attempt === 0) return `${prompt}\nCall the structured_output tool exactly once with the review object; do not answer in prose.`
+  return `${prompt}\nThis is protocol recovery attempt ${attempt + 1}. The previous attempt did not produce a valid structured result. Call the structured_output tool exactly once, with exactly {"status":"complete"|"incomplete","message":"..."}; do not finish with prose or another tool call.`
+}
+
+/** Build the fail-open verdict after bounded reviewer recovery failed. */
+function unavailableReview(message: string): CompletionReview {
+  return { status: 'unavailable', message }
+}
+
 /** Narrow the provider result to the review protocol. */
 function readReview(result: SubagentResult): CompletionReview | undefined {
   if (result.stopReason !== 'completed' || typeof result.structured !== 'object' || result.structured === null) return undefined
@@ -199,20 +225,31 @@ function readReview(result: SubagentResult): CompletionReview | undefined {
 /** Build the plugin-sourced user message that steers the parent into another step. */
 function continuationMessage(message: string) {
   return createUserMessage({
-    content: [{ type: 'text', text: message }],
-    source: { ...PLUGIN_SOURCE, form: 'notice', summary: 'completion review' },
+    content: [{ type: 'text', text: `The completion review found unfinished work. Continue the task and address these changes before replying:\n\n${message}` }],
+    source: { ...PLUGIN_SOURCE, form: 'notice', summary: 'completion review requested changes' },
   })
 }
 
-/** Build the durable status notice shown while the reviewer is running. */
-function checkingMessage() {
+/** Ask the parent to use the visible completion-check tool before replying. */
+function checkRequestMessage() {
   return createUserMessage({
-    content: [{ type: 'text', text: 'Double-checking results before stopping…' }],
-    source: { ...PLUGIN_SOURCE, form: 'notice', summary: 'checking results' },
+    content: [{ type: 'text', text: 'Before replying to the user, call the `completion_check` tool and wait for its result.' }],
+    source: { ...PLUGIN_SOURCE, form: 'notice', summary: 'completion check required' },
   })
 }
 
-/** Install the completion review at the terminal turn checkpoint. */
+/** Render the completion-check tool result for the parent model and user UI. */
+function renderReview(review: CompletionReview): ContentBlock[] {
+  if (review.status === 'complete') {
+    return [{ type: 'text', text: 'Completion check passed. The request is complete.' }]
+  }
+  if (review.status === 'unavailable') {
+    return [{ type: 'text', text: `Completion check could not obtain a valid reviewer result. Continue without treating the review as passed.\n\n${review.message}` }]
+  }
+  return [{ type: 'text', text: `Completion check found unfinished work. Continue with these changes:\n\n${review.message}` }]
+}
+
+/** Install the visible completion review and its terminal-call guard. */
 export function apply(ctx: Context, config: Config): void {
   const entry: CompletionCheckerSettings = {
     enabled: config.enabled ?? DEFAULT_COMPLETION_CHECKER_ENABLED,
@@ -223,58 +260,91 @@ export function apply(ctx: Context, config: Config): void {
     onChange: () => {},
   })
 
-  const activeParents = new WeakSet<Agent>()
-  const checkerAgents = new WeakSet<Agent>()
+  const reviewStates = new WeakMap<Agent, { turn: number; review: CompletionReview }>()
   const providerName = config.provider ?? DEFAULT_COMPLETION_CHECKER_PROVIDER
+  const maxAttempts = config.maxAttempts ?? DEFAULT_COMPLETION_CHECKER_MAX_ATTEMPTS
 
-  // Provider plugins can register after this plugin even when both inject the
-  // same `subagents` service. Mount the terminal listener when the configured
-  // provider becomes available, matching the subagent tool's late-provider
-  // registration behavior.
+  // Provider plugins can register after this plugin. Mount the visible tool,
+  // its prompt policy, and the terminal guard when the configured provider
+  // becomes available.
+  let disposeTool: (() => void) | undefined
+  let disposePrompt: (() => void) | undefined
   let disposeTurnStopping: (() => void) | undefined
-  const onTurnStopping = async ({ agent, turn, reason, signal }: TurnStoppingPayload) => {
-    if (reason.kind !== 'completed' || !source().enabled || activeParents.has(agent) || checkerAgents.has(agent)) return
+  const onTurnStopping = ({ agent, turn, reason }: TurnStoppingPayload) => {
+    if (reason.kind !== 'completed'
+      || isNestedAgent(agent)
+      || !source().enabled) return
     if (isLoopRecoveryTurn(currentTurnEvents(agent, turn))) return
-    const parentSession = agent.session.header.parentSession
-    const parent = parentSession === undefined ? undefined : ctx.agents.get(parentSession)
-    if (parent !== undefined && activeParents.has(parent)) return
-
-    activeParents.add(agent)
-    let run: SubagentRun | undefined
-    try {
-      signal.throwIfAborted()
-      agent.session.append('user/message', checkingMessage(), { surfaceOp: 'append' })
-      run = await ctx.subagents.start(providerName, {
-        label: 'completion-checker',
-        prompt: [{ type: 'text', text: reviewPrompt(agent, turn) }],
-        parent: agent,
-        signal,
-        outputSchema: COMPLETION_REVIEW_SCHEMA,
-        ephemeral: true,
-      })
-      if (run.localAgent !== undefined) checkerAgents.add(run.localAgent)
-      const review = readReview(await run.result)
-      if (review?.status === 'incomplete') {
-        signal.throwIfAborted()
-        agent.steer(continuationMessage(review.message))
-      }
-    } catch (error: unknown) {
-      if (!signal.aborted) ctx.logger.warn(`completion-checker: review failed: ${String(error)}`)
-    } finally {
-      if (run?.localAgent !== undefined) checkerAgents.delete(run.localAgent)
-      if (run !== undefined) {
-        try {
-          await run.dispose()
-        } catch (error: unknown) {
-          if (!signal.aborted) ctx.logger.warn(`completion-checker: reviewer disposal failed: ${String(error)}`)
-        }
-      }
-      activeParents.delete(agent)
+    const state = reviewStates.get(agent)
+    if (state?.turn === turn) {
+      if (state.review.status === 'incomplete') agent.steer(continuationMessage(state.review.message))
+      return
     }
+    agent.steer(checkRequestMessage())
   }
 
   const mount = () => {
-    if (disposeTurnStopping !== undefined || ctx.subagents.getProvider(providerName) === undefined) return
+    if (disposeTool !== undefined || ctx.subagents.getProvider(providerName) === undefined) return
+    const tool: ToolDefinition = {
+      name: 'completion_check',
+      description: 'Validate the current task with an independent reviewer before giving the final answer. Call this after completing the work and call it again after addressing any requested changes.',
+      parameters: { type: 'object', properties: {}, additionalProperties: false },
+      output: {
+        schema: COMPLETION_REVIEW_SCHEMA,
+        render: (_args, value) => renderReview(value as unknown as CompletionReview),
+      },
+      async execute(_args, exec) {
+        const parent = exec.agent
+        if (parent === undefined) throw new Error('completion_check requires a calling agent')
+        if (!source().enabled) throw new Error('completion checker is disabled')
+        if (isNestedAgent(parent)) throw new Error('completion_check is unavailable inside a reviewer subagent')
+        const turn = parent.session.events.findLast(event => event.type === 'turn/start')
+        if (turn === undefined) throw new Error('completion_check requires an active agent turn')
+        const previous = reviewStates.get(parent)
+        if (previous?.turn === turn.data.turn && previous.review.status === 'unavailable') return previous.review
+        try {
+          let lastResult: SubagentResult | undefined
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            let run: SubagentRun | undefined
+            try {
+              run = await ctx.subagents.start(providerName, {
+                label: 'completion-checker',
+                prompt: [{ type: 'text', text: `${reviewAttemptPrompt(parent, turn.data.turn, attempt)}\nDo not call the completion_check tool; return only your structured review.` }],
+                parent,
+                signal: exec.signal,
+                outputSchema: COMPLETION_REVIEW_SCHEMA,
+                toolFilter: { deny: ['completion_check'] },
+              })
+              lastResult = await run.result
+              const review = readReview(lastResult)
+              if (review !== undefined) {
+                reviewStates.set(parent, { turn: turn.data.turn, review })
+                return review
+              }
+            } finally {
+              if (run !== undefined) await run.dispose()
+            }
+          }
+          const stopReason = lastResult?.stopReason === undefined ? 'unknown' : lastResult.stopReason
+          const review = unavailableReview(`The reviewer returned no valid structured result after ${maxAttempts} attempt(s) (last stop reason: ${stopReason}).`)
+          reviewStates.set(parent, { turn: turn.data.turn, review })
+          return review
+        } catch (error: unknown) {
+          if (exec.signal.aborted) throw error
+          const review = unavailableReview(`The reviewer failed before producing a valid structured result: ${String(error)}`)
+          reviewStates.set(parent, { turn: turn.data.turn, review })
+          return review
+        }
+      },
+    }
+    disposeTool = ctx.tools.register(tool)
+    disposePrompt = ctx.systemPrompt.section({
+      name: 'tool:completion-check',
+      order: 197,
+      text: ({ agent }) => agent === undefined || isNestedAgent(agent)
+        ? ''
+        : 'Before giving a final answer, you MUST call the `completion_check` tool. If it reports unfinished work, make the requested changes and call `completion_check` again before replying.',
+    })
     disposeTurnStopping = ctx.on('agent/turn-stopping', onTurnStopping)
   }
   ctx.on('subagent/provider-added', (provider) => {
@@ -282,6 +352,10 @@ export function apply(ctx: Context, config: Config): void {
   })
   ctx.on('subagent/provider-removed', (name) => {
     if (name !== providerName) return
+    disposeTool?.()
+    disposeTool = undefined
+    disposePrompt?.()
+    disposePrompt = undefined
     disposeTurnStopping?.()
     disposeTurnStopping = undefined
   })

@@ -184,7 +184,7 @@ describe('agent loop', () => {
     const agent = ctx.agentLoop.create(SessionId('llm-loop-error'), {
       provider: 'mock',
       model: 'mock',
-      loopDetection: { enabled: true },
+      loopDetection: { enabled: true, minTokens: 5 },
     })
     const errors: unknown[] = []
     ctx.on('agent/error', ({ agent: subject, error }) => {
@@ -224,7 +224,7 @@ describe('agent loop', () => {
     const agent = ctx.agentLoop.create(SessionId('llm-loop-compact-before-failing'), {
       provider: 'mock',
       model: 'mock',
-      loopDetection: { enabled: true, compactBeforeFailing: true },
+      loopDetection: { enabled: true, minTokens: 5, compactBeforeFailing: true },
     })
     const isolatedContext = agent.ctx.isolate('compaction')
     const compaction = new LoopCompactionEngine(isolatedContext)
@@ -284,7 +284,7 @@ describe('agent loop', () => {
     const agent = ctx.agentLoop.create(SessionId('llm-loop-no-compaction-range'), {
       provider: 'mock',
       model: 'mock',
-      loopDetection: { enabled: true, compactBeforeFailing: true },
+      loopDetection: { enabled: true, minTokens: 5, compactBeforeFailing: true },
     })
     const errors: unknown[] = []
     ctx.on('agent/error', ({ agent: subject, error }) => {
@@ -307,7 +307,7 @@ describe('agent loop', () => {
     const agent = ctx.agentLoop.create(SessionId('llm-loop-no-compaction-provider'), {
       provider: 'mock',
       model: 'mock',
-      loopDetection: { enabled: true, compactBeforeFailing: true },
+      loopDetection: { enabled: true, minTokens: 5, compactBeforeFailing: true },
     })
     const errors: unknown[] = []
     ctx.on('agent/error', ({ agent: subject, error }) => {
@@ -329,6 +329,7 @@ describe('agent loop', () => {
       model: 'mock',
       loopDetection: {
         enabled: true,
+        minTokens: 5,
         includeLoop: false,
         firstPrompt: 'first intervention',
       },
@@ -350,7 +351,7 @@ describe('agent loop', () => {
     const agent = ctx.agentLoop.create(SessionId('llm-loop-reasoning'), {
       provider: 'mock',
       model: 'mock',
-      loopDetection: { enabled: true },
+      loopDetection: { enabled: true, minTokens: 5 },
     })
 
     send(agent, 'answer this')
@@ -379,7 +380,7 @@ describe('agent loop', () => {
     const agent = ctx.agentLoop.create(SessionId('llm-loop-tool-call'), {
       provider: 'mock',
       model: 'mock',
-      loopDetection: { enabled: true, includeLoop: false },
+      loopDetection: { enabled: true, minTokens: 5, includeLoop: false },
     })
 
     send(agent, 'answer this')

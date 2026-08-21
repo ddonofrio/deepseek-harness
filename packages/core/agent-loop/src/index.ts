@@ -143,7 +143,7 @@ function resolveMaxParallelToolCalls(value: number | undefined): number {
 const DEFAULT_LOOP_DETECTION: Required<LoopDetectionOptions> = {
   enabled: false,
   includeLoop: true,
-  minTokens: 5,
+  minTokens: 16,
   firstPrompt: '<continue>',
   secondPrompt: '<You are in a loop, please output the response now>',
   thirdPrompt: "<Please stop. Explain the user's current status; do not continue with your task>",

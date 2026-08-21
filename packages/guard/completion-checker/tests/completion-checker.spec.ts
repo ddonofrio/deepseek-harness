@@ -16,12 +16,14 @@ interface ReviewHarness {
   readonly agent: Agent
   readonly starts: SubagentStartRequest[]
   readonly disposes: ReturnType<typeof vi.fn>[]
+  readonly trace: string[]
 }
 
 interface HarnessOptions {
   readonly loopRecoveryNotice?: boolean
   readonly loopRetryNotice?: boolean
   readonly largeCurrentTurnMessage?: boolean
+  readonly parentChecks?: number
 }
 
 const contexts: Context[] = []
@@ -30,7 +32,7 @@ afterEach(async () => {
   await Promise.allSettled(contexts.splice(0).map(context => context.fiber.dispose()))
 })
 
-/** Mount the real loop with a deterministic subagent seam. */
+/** Mount the real loop with a deterministic reviewer and model-call script. */
 async function harness(
   reviews: unknown[],
   config: CompletionChecker.Config = {},
@@ -41,18 +43,16 @@ async function harness(
   await mountAgentLoopTestDependencies(ctx)
   const starts: SubagentStartRequest[] = []
   const disposes: ReturnType<typeof vi.fn>[] = []
+  const trace: string[] = []
   ctx.provide('subagents', {
     getProvider: () => ({}),
     start: async (_provider: string, request: SubagentStartRequest): Promise<SubagentRun> => {
       starts.push(request)
-      const dispose = vi.fn(async () => {})
+      trace.push('start')
+      const dispose = vi.fn(async () => { trace.push('dispose') })
       disposes.push(dispose)
       const structured = reviews.shift()
-      const result: SubagentResult = {
-        output: [],
-        structured,
-        stopReason: 'completed',
-      }
+      const result: SubagentResult = { output: [], structured, stopReason: 'completed' }
       return {
         id: SessionId(`review-${starts.length}`),
         localAgent: undefined,
@@ -91,13 +91,19 @@ async function harness(
     })
   }
   await ctx.plugin(CompletionChecker, config)
-  const adapter = new MockAdapter(Array.from(
-    { length: Math.max(1, reviews.length) },
-    (_, index) => textResponse(index === 0 ? 'answer' : 'continued answer'),
-  ))
+  const parentChecks = options.parentChecks ?? reviews.length
+  const adapter = new MockAdapter(parentChecks === 0
+    ? [textResponse('answer')]
+    : [
+      ...Array.from({ length: parentChecks }, (_, index) => toolCallResponse(`check-${index + 1}`, 'completion_check', {}, 'answer')),
+      textResponse('final answer'),
+    ])
   ctx.llm.registerAdapter(['mock'], adapter)
   const agent = ctx.agentLoop.create(SessionId('parent'), { provider: 'mock', model: 'mock' })
-  return { ctx, agent, starts, disposes }
+  ctx.on('agent/inbox/inserted', ({ agent: subject, message }) => {
+    if (subject === agent && message.source.kind === 'plugin' && message.source.plugin === 'completion-checker') trace.push('steer')
+  })
+  return { ctx, agent, starts, disposes, trace }
 }
 
 function waitForIdle(ctx: Context, agent: Agent): Promise<void> {
@@ -116,52 +122,47 @@ function start(agent: Agent): void {
 }
 
 describe('completion-checker', () => {
-  it('reviews the completed turn with structured output and lets complete work stop', async () => {
+  it('runs the reviewer through a visible completion tool and disposes it before stopping', async () => {
     const { ctx, agent, starts, disposes } = await harness([{ status: 'complete', message: '' }])
     start(agent)
     await waitForIdle(ctx, agent)
 
     expect(starts).toHaveLength(1)
-    expect(starts[0]?.ephemeral).toBe(true)
+    expect(starts[0]?.ephemeral).toBeUndefined()
+    expect(starts[0]?.toolFilter).toEqual({ deny: ['completion_check'] })
     expect(starts[0]!.prompt[0]).toMatchObject({ type: 'text' })
     expect((starts[0]!.prompt[0] as { type: 'text'; text: string }).text).toContain('answer')
-    expect(starts[0]!.outputSchema).toMatchObject({
-      type: 'object',
-      required: ['status', 'message'],
-    })
+    expect(starts[0]!.outputSchema).toMatchObject({ type: 'object', required: ['status', 'message'] })
     expect(disposes[0]).toHaveBeenCalledOnce()
-    expect(agent.session.events.filter(event =>
-      event.type === 'user/message' && event.data.source.kind === 'plugin')).toHaveLength(1)
+    expect(agent.session.events.filter(event => event.type === 'tool/result')).toHaveLength(1)
     expect(agent.session.events.filter(event => event.type === 'turn/end')).toHaveLength(1)
   })
 
-  it('steers the parent with the review message when work remains', async () => {
-    const { ctx, agent, starts } = await harness([
+  it('requires another visible check after an incomplete review', async () => {
+    const { ctx, agent, starts, trace } = await harness([
       { status: 'incomplete', message: 'Verify the generated file before answering.' },
       { status: 'complete', message: '' },
     ])
-    // The mock response is enough for the continuation step; the first review
-    // must still be the source of the durable plugin notice.
     start(agent)
     await waitForIdle(ctx, agent)
 
     expect(starts).toHaveLength(2)
-    const notices = agent.session.events.filter(event =>
-      event.type === 'user/message' && event.data.source.kind === 'plugin')
-    expect(notices).toHaveLength(3)
-    expect(notices[0]).toMatchObject({
-      type: 'user/message',
-      data: { content: [{ type: 'text', text: 'Double-checking results before stopping…' }] },
-    })
-    expect(notices[1]).toMatchObject({
-      type: 'user/message',
-      data: { content: [{ type: 'text', text: 'Verify the generated file before answering.' }] },
-    })
-    expect(notices[2]).toMatchObject({
-      type: 'user/message',
-      data: { content: [{ type: 'text', text: 'Double-checking results before stopping…' }] },
-    })
+    expect(trace).toEqual(['start', 'dispose', 'start', 'dispose'])
+    expect(agent.session.events.filter(event => event.type === 'tool/result')).toHaveLength(2)
     expect(agent.session.events.filter(event => event.type === 'turn/end')).toHaveLength(1)
+  })
+
+  it('steers a completed turn into the visible check when the model omits it', async () => {
+    const { ctx, agent, starts, trace } = await harness([])
+    start(agent)
+    await waitForIdle(ctx, agent)
+
+    expect(starts).toHaveLength(0)
+    expect(trace).toContain('steer')
+    expect(agent.session.events.find(event => event.type === 'user/message' && event.data.source.kind === 'plugin')).toMatchObject({
+      type: 'user/message',
+      data: { source: { plugin: 'completion-checker', summary: 'completion check required' } },
+    })
   })
 
   it('does not review when disabled', async () => {
@@ -173,7 +174,7 @@ describe('completion-checker', () => {
   })
 
   it('does not review a turn already being recovered by the loop guard', async () => {
-    const { ctx, agent, starts } = await harness([{ status: 'complete', message: '' }], {}, { loopRecoveryNotice: true })
+    const { ctx, agent, starts } = await harness([], {}, { loopRecoveryNotice: true })
     start(agent)
     await waitForIdle(ctx, agent)
 
@@ -197,7 +198,6 @@ describe('completion-checker', () => {
     expect(prompt).toMatchObject({ type: 'text' })
     const text = (prompt as { type: 'text'; text: string }).text
     expect(text.length).toBeLessThan(14000)
-    expect(text).toContain('[truncated]')
   })
 
   it('fails open for an invalid reviewer result', async () => {
@@ -205,8 +205,31 @@ describe('completion-checker', () => {
     start(agent)
     await waitForIdle(ctx, agent)
 
-    expect(starts).toHaveLength(1)
+    expect(starts).toHaveLength(2)
     expect(agent.session.events.filter(event => event.type === 'turn/end')).toHaveLength(1)
+  })
+
+  it('retries a reviewer that omitted structured output and disposes each attempt', async () => {
+    const { ctx, agent, starts, disposes, trace } = await harness([
+      undefined,
+      { status: 'complete', message: '' },
+    ], {}, { parentChecks: 1 })
+    start(agent)
+    await waitForIdle(ctx, agent)
+
+    expect(starts).toHaveLength(2)
+    expect(trace).toEqual(['start', 'dispose', 'start', 'dispose'])
+    expect(disposes.every(dispose => dispose.mock.calls.length === 1)).toBe(true)
+    expect((starts[1]!.prompt[0] as { type: 'text'; text: string }).text).toContain('protocol recovery attempt 2')
+  })
+
+  it('reuses an unavailable verdict instead of reopening failed reviewers in the same turn', async () => {
+    const { ctx, agent, starts } = await harness([undefined], {}, { parentChecks: 2 })
+    start(agent)
+    await waitForIdle(ctx, agent)
+
+    expect(starts).toHaveLength(2)
+    expect(agent.session.events.filter(event => event.type === 'tool/result')).toHaveLength(2)
   })
 
   it('does not review a token-limited turn', async () => {
@@ -228,19 +251,18 @@ describe('completion-checker', () => {
     expect(starts).toHaveLength(0)
   })
 
-  it('launches the real fork provider and captures the structured review', async () => {
+  it('launches the real fork provider through the visible tool and leaves no child open', async () => {
     const ctx = new Context()
     contexts.push(ctx)
     await mountAgentLoopTestDependencies(ctx)
     await ctx.plugin(AgentLoop, { agents: [] })
     await ctx.plugin(SubagentRuntime)
     await ctx.plugin(CompletionChecker)
-    // The shipped loader may activate both plugins against the same service
-    // in this order; the checker must attach when the provider is added later.
     await ctx.plugin(ForkProvider, { providerName: 'fork' })
     const adapter = new MockAdapter([
-      textResponse('answer'),
+      toolCallResponse('check', 'completion_check', {}, 'answer'),
       toolCallResponse('review', 'structured_output', { status: 'complete', message: '' }),
+      textResponse('final answer'),
     ])
     ctx.llm.registerAdapter(['mock'], adapter)
     const agent = ctx.agentLoop.create(SessionId('real-fork-parent'), { provider: 'mock', model: 'mock' })
@@ -248,12 +270,11 @@ describe('completion-checker', () => {
     start(agent)
     await waitForIdle(ctx, agent)
 
-    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests).toHaveLength(3)
     expect(ctx.agents.list()).toEqual([agent])
     expect(ctx.sessions.list()).toEqual([agent.session])
-    expect(agent.session.events.filter(event =>
-      event.type === 'user/message' && event.data.source.kind === 'plugin')).toMatchObject([
-      { data: { source: { plugin: 'completion-checker' } } },
+    expect(agent.session.events.filter(event => event.type === 'tool/call')).toMatchObject([
+      { data: { name: 'completion_check' } },
     ])
   })
 })

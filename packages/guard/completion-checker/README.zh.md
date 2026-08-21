@@ -2,7 +2,7 @@
 
 [English](README.md) | 中文
 
-completion checker 会在普通轮次完成、轮次关闭之前，使用一次性的 `fork` 子 agent 复核结果。复核器继承已经关闭的对话历史，并收到当前尚未关闭轮次的 JSON 事件记录，因此可以检查用户请求、agent 已完成的工作、工具结果和最终回答。默认设置为开启。
+completion checker 提供模型可见的 `completion_check` 工具。agent 在给出最终回答前必须调用它；该工具启动一次性的 `fork` 复核器，将 verdict 返回给父 agent，并在仍有工作时让父 agent 在同一轮继续。默认启用。
 
 ## 配置
 
@@ -12,41 +12,40 @@ completion checker 会在普通轮次完成、轮次关闭之前，使用一次�
   config:
     enabled: true
     provider: fork
+    maxAttempts: 2
 ```
 
-`enabled` 也可在 General 设置中的 `completion-checker` namespace 修改，并且立即生效。`provider` 指向已注册的一次性 `ctx.subagents` 提供方，必须支持结构化输出。默认组合要求使用 `fork`，因为复核需要父 agent 的对话。
+`enabled` 也可在 General 设置中的 `completion-checker` namespace 修改，并立即生效。`provider` 指向已注册的一次性 `ctx.subagents` 提供方，必须支持结构化输出。`maxAttempts` 限制复核器没有输出结构化结果时的协议恢复次数，默认值为 `2`，上限为 `3`。默认组合要求使用 `fork`，因为复核需要父 agent 的对话。
 
 ## 复核协议
 
-复核器返回只有以下字段的结构化值：
+复核器返回以下结构化值：
 
 ```json
-{"status":"complete|incomplete","message":""}
+{"status":"complete|incomplete|unavailable","message":""}
 ```
 
-每次复核开始前，父对话都会显示 `Double-checking results before stopping…` 通知。`complete` 且 message 为空时，当前轮次可以关闭。`incomplete` 必须包含非空且可执行的 `message`；checker 会把文本作为插件来源的 user message 发送给父 agent，并引导它再执行一个模型步骤。复核失败或结果无效时，保留原回答并记录 warning。
+父 agent 完成请求工作后调用 `completion_check`。工具以结构化输出启动复核器，等待结果，释放复核器，然后返回可见 verdict：`complete` 返回 `Completion check passed. The request is complete.`；`incomplete` 将所需修改返回给父 agent。父 agent 必须完成这些修改，并在回答前再次调用工具。如果复核器没有输出结构化结果，checker 会用更严格的协议提示进行有限次恢复；每次失败尝试都会在下一次尝试前释放。达到重试上限后返回 `unavailable`，明确说明没有获得有效复核并对当前轮次 fail-open，不会要求父 agent 重复同一个失败调用。同一轮次的后续调用会复用 `unavailable` 结果，不再启动新的复核器。
 
-复核器是一次性子 agent，结果结算后会被释放。checker 不会递归复核复核器或其创建的子 agent。复核器继承父 agent 可用的工具，并在需要时使用这些工具进行验证。
+复核器是可见的一次性子 agent，会在运行期间出现在 subagent/session 列表中；启用持久化时，完成后的 transcript 仍可检查。工具返回前会释放它。复核器的 scoped tools 中移除了 `completion_check`，嵌套 agent 也不参与顶层完成策略，因此验证不会递归。复核器继承父 agent 的其他工具，并在需要时使用这些工具进行验证。
 
 ## Model Experience
-
-当前轮次事件摘要有长度上限；大型消息或工具结果区块在进入复核提示词前会被截断。包含 agent-loop 循环恢复通知的轮次会跳过复核，因此循环恢复与完成度复核不会同时运行。
 
 ### 完成度复核
 
 #### What the model sees
 
-复核器会收到继承的对话，以及当前轮次的 JSON 事件记录，并且必须返回 `{status, message}` 结构化结果。复核提示要求它检查用户请求、已完成的工作、工具结果和最终回答；需要验证时可以使用继承的工具。复核请求运行期间，父对话会显示 `Double-checking results before stopping…` 通知。
+当前轮次事件摘要有大小限制，大型消息或工具结果块会在进入复核提示前截断。复核器收到继承的对话和当前轮次 JSON 事件记录，并且必须返回 `{status, message}` 结构化结果。复核提示要求它检查用户请求、已完成工作、工具结果和回答草稿；需要验证时可以使用继承的工具。父对话会显示 `completion_check` tool call 及其 pending/result 状态。
 
 #### Token effect
 
-每个已完成的父轮次都会增加一次复核器模型请求。如果结果为 `incomplete`，父 agent 还会增加一次继续执行的请求。
+每次 `completion_check` 调用都会增加一次复核器模型请求。`incomplete` 结果会让父 agent 增加一个步骤，该步骤通常以再次调用 `completion_check` 结束。协议恢复也会为同一次调用增加有限的复核请求。
 
 #### KV Cache effect
 
-复核器使用独立的子 agent 请求。父 agent 的缓存上下文不会加入复核提示或复核器的私有推理；状态通知以及需要时的不完整复核都会作为插件来源的继续上下文持久化。
+复核器是独立的子 agent 请求。父 agent 的缓存上下文不会包含复核器的私有推理；只有 tool call/result 以及所需的继续上下文会保留在父对话中。
 
 ## 已知限制和后续工作
 
-- checker 不保证正确性：它增加一次独立的模型复核，只有复核报告 `incomplete` 时才会继续。
-- 提供方失败对父轮次采用 fail-open，因此配置提供方后，复核不可用不会阻塞用户回答。
+- checker 不保证正确性：它增加一次独立的模型复核，并在复核报告 `incomplete` 时要求父 agent 继续。
+- 提供方在配置完成后发生失败时，父轮次采用 fail-open，因此复核不可用不会阻塞用户回答。
