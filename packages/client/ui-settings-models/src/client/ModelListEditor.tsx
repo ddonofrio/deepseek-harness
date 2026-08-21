@@ -450,8 +450,8 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         footer={(
           <div className={styles['fetchFooter']}>
             <div className={styles['fetchFooterGroup']}>
-              <Button variant="ghost" size="sm" onClick={selectAllCandidates}>{t('fetchSelectAll')}</Button>
-              <Button variant="ghost" size="sm" onClick={deselectAllCandidates}>{t('fetchDeselectAll')}</Button>
+              <Button variant="outline" size="sm" onClick={selectAllCandidates}>{t('fetchSelectAll')}</Button>
+              <Button variant="outline" size="sm" onClick={deselectAllCandidates}>{t('fetchDeselectAll')}</Button>
               <Button variant="outline" onClick={closePicker}>{t('cancel')}</Button>
               <Button variant="outline" onClick={adoptPicked}>{t('fetchAdopt')}</Button>
             </div>
