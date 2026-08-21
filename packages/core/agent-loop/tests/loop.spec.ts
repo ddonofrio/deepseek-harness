@@ -88,13 +88,9 @@ function repeatedToolCallResponse(): StreamChunk[] {
 class LoopCompactionEngine extends CompactionEngine {
   calls = 0
   returnNull = false
+  statuses: string[] = []
 
-  override async compactIfNeeded(
-    agent: CompactionAgentContext,
-    trigger: CompactionTrigger,
-    _signal: AbortSignal,
-  ): Promise<CompactionResult | null> {
-    if (trigger !== 'loop-detection') throw new Error(`unexpected compaction trigger: ${trigger}`)
+  private compact(agent: CompactionAgentContext): CompactionResult | null {
     this.calls += 1
     if (this.returnNull) return null
     const start = agent.session.surface.nodes[0]
@@ -130,11 +126,21 @@ class LoopCompactionEngine extends CompactionEngine {
     }
   }
 
-  override compactNow(
-    _agent: ManualCompactAgentContext,
+  override async compactIfNeeded(
+    agent: CompactionAgentContext,
+    trigger: CompactionTrigger,
     _signal: AbortSignal,
   ): Promise<CompactionResult | null> {
-    return Promise.resolve(null)
+    if (trigger !== 'loop-detection') throw new Error(`unexpected compaction trigger: ${trigger}`)
+    return this.compact(agent)
+  }
+
+  override async compactNow(
+    agent: ManualCompactAgentContext,
+    _signal: AbortSignal,
+  ): Promise<CompactionResult | null> {
+    this.statuses.push((agent as ManualCompactAgentContext & { status: string }).status)
+    return this.compact(agent)
   }
 
   override compactRegion(): Promise<CompactionResult> {
@@ -231,23 +237,29 @@ describe('agent loop', () => {
     })
 
     send(agent, 'answer this')
-    await waitForIdle(ctx, agent)
+    await agent.whenIdle()
     disposeAgentPresetLookup()
 
     expect(compaction.calls).toBe(1)
+    expect(compaction.statuses).toEqual(['idle'])
     expect(adapter.requests).toHaveLength(6)
     expect(adapter.requests[4]?.messages.at(-1)).toMatchObject({
       role: 'user',
-      content: [{ type: 'text', text: "<Please stop. Explain the user's current status; do not continue with your task>" }],
+      content: [{ type: 'text', text: 'answer this' }],
     })
     expect(adapter.requests[5]?.messages.at(-1)).toMatchObject({
       role: 'user',
       content: [{ type: 'text', text: '<continue>' }],
     })
     expect(agent.session.events.filter(event => event.type === 'compaction/end')).toHaveLength(1)
+    const turnEnds = agent.session.events.filter(event => event.type === 'turn/end')
+    expect(turnEnds[0]).toMatchObject({
+      type: 'turn/end',
+      data: { turn: 1, reason: { kind: 'error', error: { code: 'LLM_LOOP' } } },
+    })
     expect(agent.session.events.at(-1)).toMatchObject({
       type: 'turn/end',
-      data: { reason: { kind: 'completed' } },
+      data: { turn: 2, reason: { kind: 'completed' } },
     })
   })
 
@@ -270,7 +282,7 @@ describe('agent loop', () => {
     })
 
     send(agent, 'answer this')
-    await waitForIdle(ctx, agent)
+    await agent.whenIdle()
 
     expect(compaction.calls).toBe(1)
     expect(errors[0]).toMatchObject({ message: 'LLM in infinite loop.', code: 'LLM_LOOP' })

@@ -74,6 +74,16 @@ interface AgentPresetServiceLookup {
   serviceFor(agent: { ctx: Context }, name: string): CompactionEngine | undefined
 }
 
+interface PendingLoopCompaction {
+  readonly messages: readonly UserMessage[]
+  readonly compaction: CompactionEngine
+}
+
+/** Internal control flow that ends the failed turn before automatic compaction. */
+class LoopCompactionRequested extends Error {
+  override readonly name = 'LoopCompactionRequested'
+}
+
 function resolveLoopDetection(options: LoopDetectionOptions | undefined): ResolvedLoopDetectionOptions {
   return {
     enabled: options?.enabled ?? false,
@@ -119,6 +129,8 @@ export class ReactLoopAgent implements Agent {
   private readonly runtimeContext: RuntimeContextProjection
   private readonly loopDetection: ResolvedLoopDetectionOptions
   private consecutiveLoopDetections = 0
+  private activeTurnMessages: UserMessage[] = []
+  private pendingLoopCompaction: PendingLoopCompaction | undefined
 
   constructor(
     private loopCtx: Context,
@@ -214,6 +226,9 @@ export class ReactLoopAgent implements Agent {
    *   the inbox insertion so a reentrant cancel cannot reclassify it.
    */
   private wakeDriver(wakeAfterAbort = false): void {
+    // Automatic loop recovery owns the idle-to-maintenance handoff. Keep
+    // waking input queued until compactNow has completed its standalone run.
+    if (this.pendingLoopCompaction !== undefined) return
     if (this.phase.kind !== 'idle') {
       // Maintenance and aborted drivers cannot deliver the wake: latch it for
       // replay at convergence. Live drivers claim queued work themselves;
@@ -243,11 +258,15 @@ export class ReactLoopAgent implements Agent {
     } while (activity !== this.activityDone)
   }
 
-  /** Report one failure at its live boundary, then preserve it for driver containment. */
-  private throwError(error: unknown): never {
+  /** Emit a failure at the agent boundary without changing driver control flow. */
+  private reportError(error: unknown): void {
     const turn = this.phase.kind === 'running' ? this.phase.turn : this.phase.lastTurn
     const step = this.phase.kind === 'running' ? this.phase.step : 0
     this.dispatch.emit('agent/error', { turn, step, error })
+  }
+
+  private throwError(error: unknown): never {
+    this.reportError(error)
     throw error
   }
 
@@ -261,8 +280,30 @@ export class ReactLoopAgent implements Agent {
       if (this.phase.kind === 'running') {
         const { turn, wakeRequested } = this.phase
         this.setPhase({ kind: 'idle', lastTurn: turn })
-        if (wakeRequested && this.inbox.hasPending) this.wakeDriver()
+        const pending = this.pendingLoopCompaction
+        if (pending !== undefined) {
+          await this.finishLoopCompaction(pending)
+        } else if (wakeRequested && this.inbox.hasPending) this.wakeDriver()
       }
+    }
+  }
+
+  /** Run loop recovery through the same idle maintenance path as `/compact`. */
+  private async finishLoopCompaction(pending: PendingLoopCompaction): Promise<void> {
+    try {
+      const result = await pending.compaction.compactNow(this, new AbortController().signal)
+      if (result === null) {
+        this.reportError(new LlmError('LLM in infinite loop.', 'LLM_LOOP'))
+      } else {
+        // The failed turn's original input must be the first input of the new
+        // model context, after the standalone compaction transaction commits.
+        this.inbox.splice('next-turn', 0, 0, [...pending.messages])
+      }
+    } catch (error: unknown) {
+      this.reportError(error)
+    } finally {
+      this.pendingLoopCompaction = undefined
+      if (this.phase.kind === 'idle' && this.inbox.hasPending) this.wakeDriver()
     }
   }
 
@@ -271,6 +312,7 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
+    if (target === 'next-turn') this.activeTurnMessages = [...claimed]
     if (claimed.some(message => message.source.kind === 'user')) this.consecutiveLoopDetections = 0
     const assembly = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
     signal.throwIfAborted()
@@ -302,6 +344,7 @@ export class ReactLoopAgent implements Agent {
       this.throwError(error)
     }
     phase.turn = turn
+    this.activeTurnMessages = []
     let turnEnds: TurnEndReason | null = null
     let stepReason: TurnEndReason | null = null
     let target: InboxTarget = 'next-turn'
@@ -359,6 +402,13 @@ export class ReactLoopAgent implements Agent {
         turnEnds = { kind: 'aborted', reason: signal.reason as AgentCancelCause }
         throw error
       }
+      if (error instanceof LoopCompactionRequested) {
+        turnEnds = {
+          kind: 'error',
+          error: { message: 'LLM in infinite loop.', code: 'LLM_LOOP' },
+        }
+        return false
+      }
       // Every failure is structured: an `LlmError` keeps its facts, anything
       // else flattens to `errorChain` text under the `UNKNOWN` code.
       turnEnds = {
@@ -370,10 +420,14 @@ export class ReactLoopAgent implements Agent {
       this.throwError(error)
     } finally {
       try {
-        // oxlint-disable-next-line typescript/no-non-null-assertion -- every exit assigns a turn ending
-        this.session.append('turn/end', { turn, reason: turnEnds! })
-      } catch (error: unknown) {
-        this.throwError(error)
+        try {
+          // oxlint-disable-next-line typescript/no-non-null-assertion -- every exit assigns a turn ending
+          this.session.append('turn/end', { turn, reason: turnEnds! })
+        } catch (error: unknown) {
+          this.throwError(error)
+        }
+      } finally {
+        this.activeTurnMessages = []
       }
     }
     if (!this.inbox.hasPending) return false
@@ -433,11 +487,12 @@ export class ReactLoopAgent implements Agent {
                 ?? (this.loopCtx.reflect.get('agentPresets') as AgentPresetServiceLookup | undefined)
                   ?.serviceFor(this, 'compaction')
               if (compaction !== undefined) {
-                const compacted = await compaction.compactIfNeeded(this, 'loop-detection', signal) !== null
-                signal.throwIfAborted()
-                if (compacted) {
-                  this.consecutiveLoopDetections = 0
-                  continue
+                if (this.activeTurnMessages.length > 0) {
+                  this.pendingLoopCompaction = {
+                    messages: [...this.activeTurnMessages],
+                    compaction,
+                  }
+                  throw new LoopCompactionRequested()
                 }
               }
             }

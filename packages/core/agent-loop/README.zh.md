@@ -60,7 +60,7 @@ interface Config {
 
 通过配置创建的 agent 会自动启动。模型调用同时需要 `provider` 和 `model`；`agent/request` 可以在分发前补齐缺失的这一对值。可选的正数 `maxTokens` 会为每次对话请求提供初始输出上限，并记录在请求 header 中。`loopDetection` 会在每次响应中检查来自文本、思考和工具调用内容的单词／标点 token-like 单元；当同一个后缀连续出现三次时立即停止循环，可选地记录部分 assistant 响应，并为下一个 step 排队配置的干预提示词。只发送完整区块而不发送增量的 adapter 也会通过 `block-end` 被检查，且同一区块不会重复计算。第一次、第二次和第三次连续检测分别使用对应提示词；第四次检测会以 `LLM_LOOP` 和 `LLM in infinite loop.` 结束。正常完成的响应会将连续计数器归零。默认提示词为 `<continue>`、`<You are in a loop, please output the response now>` 和 `<Please stop. Explain the user's current status; do not continue with your task>`。General 设置页面提供同一策略的 `agent-loop` 字段（`loopDetectionEnabled`、`loopDetectionIncludeLoop`、`loopDetectionMinTokens` 以及三个提示词字段）；这些值会应用于新 agent，除非显式的 `AgentOptions.loopDetection` 字段覆盖它们。`maxParallelToolCalls` 限制每个 agent 针对并行安全调用使用的滚动池，默认值为 `10`。`agents` 刻意不在 Settings 段中——它在服务启动时被消费一次，所以存储的改动只会看起来生效。`cwd` 仅应用于全新会话，而 `resumeSessionId` 保留持久化元数据。通过配置创建的 agent 使用部署 persona；编程式 setup 可以按 agent 遮蔽它。该插件为每个 agent 提供 `provider`、`model` 和 `cwd` 提示词变量；harness 身份与部署 persona 属于 `dsh-system-prompt`。
 
-启用 `compactBeforeFailing` 后，第四次检测会请求已加载的 `ctx.compaction` 提供方使用强制的 `loop-detection` 触发器压缩，并重放同一个 step。成功替换会将连续计数器归零；缺少压缩服务或没有有效替换仍会结束循环。
+启用 `compactBeforeFailing` 后，第四次检测会结束失败的轮次，等待 driver 进入 idle，然后调用已加载的 `ctx.compaction` 提供方的 `compactNow` 路径。独立维护操作完成前，唤醒输入会保留在队列中。成功替换会将原始轮次输入放到 `next-turn` 队首，并在新的轮次中派发；没有有效范围或后端失败仍会结束循环。
 
 General 设置还会通过 `loopDetectionCompactBeforeFailing` 暴露该选项，以及现有的循环检测字段。
 
