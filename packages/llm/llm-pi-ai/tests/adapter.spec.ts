@@ -169,6 +169,20 @@ describe('PiAiAdapter provider routing', () => {
     expect(server.requests).toHaveLength(2)
   })
 
+  it('disables reasoning for compaction requests despite the profile default', async () => {
+    const server = await mockServer([{ events: textEvents }])
+    const ctx = await harness(server.url, { reasoning: 'max' })
+
+    await assemble(ctx, {
+      model: 'deepseek-v4-flash',
+      purpose: 'compaction',
+      messages: [],
+    })
+
+    expect(server.requests[0]).toMatchObject({ thinking: { type: 'disabled' } })
+    expect(server.requests[0]).not.toHaveProperty('reasoning_effort')
+  })
+
   it('preserves omitted profile options when constructing the adapter directly', async () => {
     const server = await mockServer([{ events: textEvents }])
     const ctx = new Context()

@@ -322,6 +322,19 @@ describe('serializeRequest', () => {
     expect(wire.reasoning_effort).toBeUndefined()
   })
 
+  it('disables thinking for compaction requests without changing adapter defaults', () => {
+    const wire = serializeRequest(
+      request({
+        messages: history,
+        purpose: 'compaction',
+        reasoningEffort: ReasoningEffortId('max'),
+      }),
+      { thinking: 'enabled', reasoningEffort: 'max' },
+    )
+    expect(wire.thinking).toEqual({ type: 'disabled' })
+    expect(wire.reasoning_effort).toBeUndefined()
+  })
+
   it('omits thinking fields when unset (provider default applies)', () => {
     const wire = serializeRequest(request({ messages: history }))
     expect(wire.thinking).toBeUndefined()
