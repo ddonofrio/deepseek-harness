@@ -167,10 +167,12 @@ interface AgentOptions {
   model?: string
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /** Optional repeated-model-output protection policy. */
+  loopDetection?: LoopDetectionOptions
 }
 ```
 
-在 `agent/request` 之后，分发要求 `provider` 与 `model` 都存在。提供 `maxTokens` 时，它必须是正安全整数，并限制每次对话模型请求的输出；省略时，系统会在写入请求 header 前填入确切模型的适配器默认值，否则提供方行为保持不变。agent 作用域的 `deployment:persona` 提示词段落可以遮蔽全局默认 persona。
+在 `agent/request` 之后，分发要求 `provider` 与 `model` 都存在。提供 `maxTokens` 时，它必须是正安全整数，并限制每次对话模型请求的输出；省略时，系统会在写入请求 header 前填入确切模型的适配器默认值，否则提供方行为保持不变。启用 `loopDetection` 后，流式处理会停止重复的文本、思考或工具调用内容，并为下一个 step 排队干预提示词。agent 作用域的 `deployment:persona` 提示词段落可以遮蔽全局默认 persona。
 
 inbox 即投递词汇——agent 以持久投影形式拥有的两条有序待处理消息列表：
 
@@ -912,6 +914,8 @@ Replace the frozen call configuration. `await next()` yields the config the mach
  * @param payload.agent - the agent making the model call.
  * @param payload.turn - the open turn number.
  * @param payload.step - the step whose request this is.
+ * @param payload.reason - the sticky result that will close the turn if no listener steers another step.
+ * @param payload.stepReason - the result of the latest completed step, before sticky turn accounting.
  * @param payload.signal - the current turn's explicit abort signal.
  * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
  * @mode waterfall
@@ -1019,14 +1023,16 @@ The turn is about to close: the model owes no response (no live tool calls, no f
  * closes only when that inbox drains.
  * @param payload.agent - the agent whose turn is at its stop boundary.
  * @param payload.turn - the turn about to close.
+ * @param payload.reason - the terminal reason retained for the turn.
+ * @param payload.stepReason - the result of the latest completed step before turn-level sticky accounting.
  * @param payload.signal - the current turn's explicit abort signal.
  * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
  * @mode serial
  */
-'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; signal: AbortSignal }): Promise<void> | void
+'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; reason: TurnEndReason; stepReason: TurnEndReason; signal: AbortSignal }): Promise<void> | void
 ```
 
-Types: [Scoped](scope.zh.md)
+Types: [Scoped](scope.zh.md) · [TurnEndReason](session.zh.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

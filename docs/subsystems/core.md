@@ -163,10 +163,12 @@ interface AgentOptions {
   model?: string
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /** Optional repeated-model-output protection policy. */
+  loopDetection?: LoopDetectionOptions
 }
 ```
 
-Dispatch requires `provider` and `model` after `agent/request`. When present, `maxTokens` must be a positive safe integer and caps every conversation-model request; omission allows the exact-model adapter default to materialize before the request header, or otherwise leaves provider behavior unchanged. An agent-scoped `deployment:persona` prompt section may shadow the global default persona.
+Dispatch requires `provider` and `model` after `agent/request`. When present, `maxTokens` must be a positive safe integer and caps every conversation-model request; omission allows the exact-model adapter default to materialize before the request header, or otherwise leaves provider behavior unchanged. When enabled, `loopDetection` stops repeated text, reasoning, or tool-call content during streaming and queues an intervention prompt for the next step. An agent-scoped `deployment:persona` prompt section may shadow the global default persona.
 
 The inbox is the delivery vocabulary — two ordered pending-message lists the agent owns as a durable projection:
 
@@ -902,6 +904,8 @@ Replace the frozen call configuration. `await next()` yields the config the mach
  * @param payload.agent - the agent making the model call.
  * @param payload.turn - the open turn number.
  * @param payload.step - the step whose request this is.
+ * @param payload.reason - the sticky result that will close the turn if no listener steers another step.
+ * @param payload.stepReason - the result of the latest completed step, before sticky turn accounting.
  * @param payload.signal - the current turn's explicit abort signal.
  * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
  * @mode waterfall
@@ -1009,14 +1013,16 @@ The turn is about to close: the model owes no response (no live tool calls, no f
  * closes only when that inbox drains.
  * @param payload.agent - the agent whose turn is at its stop boundary.
  * @param payload.turn - the turn about to close.
+ * @param payload.reason - the terminal reason retained for the turn.
+ * @param payload.stepReason - the result of the latest completed step before turn-level sticky accounting.
  * @param payload.signal - the current turn's explicit abort signal.
  * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
  * @mode serial
  */
-'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; signal: AbortSignal }): Promise<void> | void
+'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; reason: TurnEndReason; stepReason: TurnEndReason; signal: AbortSignal }): Promise<void> | void
 ```
 
-Types: [Scoped](scope.md)
+Types: [Scoped](scope.md) · [TurnEndReason](session.md)
 
 Source: [`packages/core/agent/src/runtime-types.ts`](../../packages/core/agent/src/runtime-types.ts)
 

@@ -12,6 +12,7 @@ import {
   SettingsDescribeMirror, type SettingsMirrorSnapshot,
 } from '@deepseek-ai/dsh-client-ui-settings/src/client/settings-mirror.ts'
 import { ConfigurablePluginsTabController } from '../src/client/tab-store.ts'
+import { TokenLimitHandlerRowController, type TokenLimitHandlerSettings } from '../src/client/token-limit-handler-controller.ts'
 import { WebSearchCardController, type WebSearchSettings } from '../src/client/web-search-card-controller.ts'
 
 /** Make the stub behave like a Host that accepts every write. */
@@ -380,6 +381,36 @@ describe('AgentLoopCardController', () => {
     host.publish({ status: 'ready', writable: false, value: { maxParallelToolCalls: 10 } })
 
     expect(controller.inject().hooks.agentLoopCard.getSnapshot().writable).toBe(false)
+  })
+})
+
+describe('TokenLimitHandlerRowController', () => {
+  it('projects the continue-five default and saves the recovery fields', async () => {
+    const host = stubSettingsScope<TokenLimitHandlerSettings>()
+    acceptWrites(host)
+    const controller = new TokenLimitHandlerRowController(host.scope)
+    host.publish({
+      status: 'ready',
+      writable: true,
+      value: { action: 'continue', continueCount: 5, customPrompt: '' },
+      base: { action: 'continue', continueCount: 5, customPrompt: '' },
+      user: {},
+    })
+    const face = controller.inject()
+
+    expect(face.hooks.tokenLimitHandler.getSnapshot()).toMatchObject({
+      action: { text: 'continue' },
+      continueCount: { text: '5' },
+    })
+    face.edit('action', 'custom-prompt')
+    face.edit('customPrompt', 'finish in fewer words')
+    face.save()
+    await vi.waitFor(() => { expect(host.set).toHaveBeenCalledTimes(2) })
+
+    expect(host.set.mock.calls).toEqual([
+      ['action', 'custom-prompt'],
+      ['customPrompt', 'finish in fewer words'],
+    ])
   })
 })
 

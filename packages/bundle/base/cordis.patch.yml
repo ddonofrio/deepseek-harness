@@ -393,6 +393,12 @@
         thresholds: [3, 5, 8]
         argumentsPreviewChars: 500
 
+    - id: token-limit-handler
+      name: '@deepseek-ai/dsh-token-limit-handler'
+      config:
+        action: continue
+        continueCount: 5
+
     # Every mode enables the stable model-facing web_search tool. DeepSeek search
     # resolves the same DEEPSEEK_API_KEY credential the Models page manages for
     # chat, at each search; its Messages endpoint is separate from the

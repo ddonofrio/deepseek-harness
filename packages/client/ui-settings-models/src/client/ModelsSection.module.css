@@ -634,7 +634,7 @@ select.input {
 }
 
 .fetchDialog {
-  max-width: 520px;
+  max-width: 1040px;
 
   /* The candidate list scrolls inside this dialog, an elevated surface, so the
      scrollbar indirection is rebound here rather than on the scrolling child:

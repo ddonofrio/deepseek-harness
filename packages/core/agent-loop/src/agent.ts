@@ -36,7 +36,7 @@ import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type { Context } from '@deepseek-ai/cordis'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
-import { detectTokenLoop, tokenizeLoopText } from './loop-detector.ts'
+import { detectTokenLoop, loopTextForChunk, tokenizeLoopText } from './loop-detector.ts'
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -295,6 +295,7 @@ export class ReactLoopAgent implements Agent {
     }
     phase.turn = turn
     let turnEnds: TurnEndReason | null = null
+    let stepReason: TurnEndReason | null = null
     let target: InboxTarget = 'next-turn'
     try {
       while (true) {
@@ -322,6 +323,7 @@ export class ReactLoopAgent implements Agent {
           // max-tokens is sticky: once any step hits the ceiling, later steps
           // that complete normally must not downgrade the turn outcome.
           const stepEnd = await this.step(decision.assembly)
+          if (stepEnd !== null) stepReason = stepEnd
           // max-tokens stays sticky: a later completed step must not
           // downgrade the turn outcome.
           if (turnEnds === null || turnEnds.kind !== 'max-tokens') turnEnds = stepEnd
@@ -330,7 +332,15 @@ export class ReactLoopAgent implements Agent {
         }
         signal.throwIfAborted()
         if (turnEnds && this.inbox.nextStep.length === 0) {
-          await this.dispatch.serial('agent/turn-stopping', { turn, signal })
+          await this.dispatch.serial('agent/turn-stopping', {
+            turn,
+            reason: turnEnds,
+            // A max-tokens result remains the turn's final reason after a
+            // continued step completes; handlers need the latest step result
+            // to avoid treating that normal completion as another limit hit.
+            stepReason: stepReason ?? turnEnds,
+            signal,
+          })
           signal.throwIfAborted()
         }
         if (turnEnds && this.inbox.nextStep.length === 0) break
@@ -389,12 +399,14 @@ export class ReactLoopAgent implements Agent {
         const stream = preparedCall?.stream(streamRequest) ?? this.loopCtx.llm.stream(streamRequest)
         signal.throwIfAborted()
         let responseText = ''
+        const deltaIndexes = new Set<number>()
         for await (const chunk of stream) {
           signal.throwIfAborted()
           chunkSeqs.push(this.session.append('assistant/chunk', { turn, step, chunk }).seq)
           assembler.push(chunk)
-          if (this.loopDetection.enabled && chunk.type === 'text-delta') {
-            responseText += chunk.text
+          const loopText = this.loopDetection.enabled ? loopTextForChunk(chunk, deltaIndexes) : undefined
+          if (loopText !== undefined) {
+            responseText += loopText
             detectedLoop = detectTokenLoop(tokenizeLoopText(responseText), this.loopDetection.minTokens)
             if (detectedLoop !== undefined) {
               requestAbort.abort(new Error('LLM loop detected'))

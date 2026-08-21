@@ -49,6 +49,30 @@ function userTexts(agent: Agent): string[] {
     .flatMap(b => b.type === 'text' ? [b.text] : [])
 }
 
+function reasoningResponse(text: string): StreamChunk[] {
+  return [
+    { type: 'block-start', index: 0, blockType: 'reasoning' },
+    ...Array.from(text, (char): StreamChunk => ({ type: 'reasoning-delta', index: 0, text: char })),
+    { type: 'block-end', index: 0, block: { type: 'reasoning', text } },
+    { type: 'finish', reason: { kind: 'stop' } },
+  ]
+}
+
+function repeatedToolCallResponse(): StreamChunk[] {
+  const calls = Array.from({ length: 3 }, (_, index): StreamChunk[] => {
+    const id = CallId(`loop-${index}`)
+    return [
+      { type: 'block-start', index, blockType: 'tool-call' },
+      { type: 'tool-call-delta', index, id, name: 'echo', argumentsDelta: '{"value":"repeat"}' },
+      { type: 'block-end', index, block: { type: 'tool-call', id, name: 'echo', arguments: '{"value":"repeat"}' } },
+    ]
+  })
+  return [
+    ...calls.flat(),
+    { type: 'finish', reason: { kind: 'tool-calls' } },
+  ]
+}
+
 describe('agent loop', () => {
   it('cuts a repeated model response and continues with the configured escalation prompts', async () => {
     const adapter = new MockAdapter([
@@ -126,6 +150,56 @@ describe('agent loop', () => {
       content: [{ type: 'text', text: 'first intervention' }],
     })
     expect(agent.session.events.filter(event => event.type === 'assistant/message')).toHaveLength(1)
+  })
+
+  it('detects repeated reasoning output while the model is thinking', async () => {
+    const repeated = 'think about this very carefully think about this very carefully think about this very carefully'
+    const adapter = new MockAdapter([reasoningResponse(repeated), textResponse('recovered')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-reasoning'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true },
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[1]?.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: '<continue>' }],
+    })
+  })
+
+  it('detects repeated tool-call output before any tool executes', async () => {
+    const adapter = new MockAdapter([repeatedToolCallResponse(), textResponse('recovered')])
+    const ctx = await harness(adapter)
+    let executions = 0
+    ctx.tools.register(defineContentToolFixture({
+      name: 'echo',
+      description: 'echo back',
+      parameters: { value: { type: 'string' } },
+      async execute() {
+        executions += 1
+        return [{ type: 'text', text: 'echoed' }]
+      },
+    }))
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-tool-call'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true, includeLoop: false },
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(executions).toBe(0)
+    expect(adapter.requests[1]?.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: '<continue>' }],
+    })
   })
 
   it('keeps detection disabled by default', async () => {

@@ -1,5 +1,7 @@
 /** Pure token-like repeated-output detection used by the concrete agent loop. */
 
+import type { ContentBlock, StreamChunk } from '@deepseek-ai/dsh-llm'
+
 /** A block repeated three times at the end of a model response. */
 export interface TokenLoop {
   /** Index where the repeated suffix starts. */
@@ -34,7 +36,48 @@ export function detectTokenLoop(tokens: readonly string[], minimumLength = 5): T
   return undefined
 }
 
-/** Split visible model text into provider-neutral token-like units. */
+/** Split model content into provider-neutral token-like units. */
 export function tokenizeLoopText(text: string): string[] {
   return text.match(/\p{L}[\p{L}\p{M}\p{N}_]*|\p{N}+|[^\p{L}\p{N}\s]/gu) ?? []
+}
+
+/**
+ * Return model-emitted content from one stream chunk for loop detection.
+ *
+ * `block-end` repeats content already delivered by a delta stream, so callers
+ * pass the indexes that have emitted deltas to avoid counting those blocks a
+ * second time. Tool-call ids are deliberately omitted: repeated calls with
+ * different ids are still the same model behavior for this heuristic.
+ * @param chunk - raw model stream chunk.
+ * @param deltaIndexes - block indexes that already emitted content deltas.
+ * @returns content to append to the detector input, or `undefined` for metadata.
+ */
+export function loopTextForChunk(chunk: StreamChunk, deltaIndexes: Set<number>): string | undefined {
+  switch (chunk.type) {
+    case 'text-delta':
+    case 'reasoning-delta':
+      deltaIndexes.add(chunk.index)
+      return chunk.text
+    case 'tool-call-delta':
+      deltaIndexes.add(chunk.index)
+      return `${chunk.name ?? ''}${chunk.argumentsDelta}`
+    case 'block-end':
+      if (deltaIndexes.has(chunk.index)) return undefined
+      return contentBlockLoopText(chunk.block)
+    default:
+      return undefined
+  }
+}
+
+/** Serialize one complete content block into detector input. */
+function contentBlockLoopText(block: ContentBlock): string | undefined {
+  switch (block.type) {
+    case 'text':
+    case 'reasoning':
+      return block.text
+    case 'tool-call':
+      return `${block.name}${block.arguments}`
+    default:
+      return undefined
+  }
 }

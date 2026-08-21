@@ -99,6 +99,16 @@ describe('ui-settings-plugins apply', () => {
     expect(row?.options).toMatchObject({ id: 'agent-loop-detection', order: 30 })
   })
 
+  it('registers token-limit recovery in General after loop detection', async () => {
+    const { ctx, slots } = await bench()
+    declareRoot(slots)
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    const row = slots.entries('settings.general.item').find(entry => entry.options.id === 'token-limit-handler')
+    expect(row?.options).toMatchObject({ id: 'token-limit-handler', order: 40 })
+  })
+
 
   it('injects a live tab projection, the card directory, and one business face per card', async () => {
     const { ctx, slots } = await bench()

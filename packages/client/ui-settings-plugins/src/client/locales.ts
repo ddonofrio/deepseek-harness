@@ -12,6 +12,10 @@ export type PluginsSettingsLocaleKey =
   | 'loopDetectionMinTokens' | 'loopDetectionMinTokensHint' | 'loopDetectionFirstPrompt'
   | 'loopDetectionSecondPrompt' | 'loopDetectionThirdPrompt' | 'loopDetectionPromptHint'
   | 'loopDetectionOn' | 'loopDetectionOff' | 'loopDetectionYes' | 'loopDetectionNo'
+  | 'tokenLimitHandlerTitle' | 'tokenLimitHandlerDescription' | 'tokenLimitHandlerAction'
+  | 'tokenLimitHandlerActionHint' | 'tokenLimitHandlerContinue' | 'tokenLimitHandlerStop'
+  | 'tokenLimitHandlerCustom' | 'tokenLimitHandlerContinueCount' | 'tokenLimitHandlerContinueCountHint'
+  | 'tokenLimitHandlerCustomPrompt' | 'tokenLimitHandlerCustomPromptHint'
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
@@ -59,6 +63,17 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   loopDetectionOff: 'Off',
   loopDetectionYes: 'Yes',
   loopDetectionNo: 'No',
+  tokenLimitHandlerTitle: 'Token limit reached handler',
+  tokenLimitHandlerDescription: 'Choose what the agent does when a response reaches the output-token limit.',
+  tokenLimitHandlerAction: 'Action',
+  tokenLimitHandlerActionHint: 'Stop, continue with a short prompt, or send your own prompt.',
+  tokenLimitHandlerContinue: 'Continue',
+  tokenLimitHandlerStop: 'Stop',
+  tokenLimitHandlerCustom: 'Custom prompt',
+  tokenLimitHandlerContinueCount: 'Consecutive continuations',
+  tokenLimitHandlerContinueCountHint: 'Maximum number of consecutive `continue` prompts before stopping. Default: 5.',
+  tokenLimitHandlerCustomPrompt: 'Custom prompt',
+  tokenLimitHandlerCustomPromptHint: 'Sent as the next user message each time the output-token limit is reached.',
   webSearchTitle: 'Web search',
   webSearchDescription: 'The DeepSeek search provider.',
   webSearchApiKey: 'API key',
@@ -114,6 +129,17 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   loopDetectionOff: '关',
   loopDetectionYes: '是',
   loopDetectionNo: '否',
+  tokenLimitHandlerTitle: '输出 token 限制处理',
+  tokenLimitHandlerDescription: '选择达到输出 token 限制时 agent 的行为。',
+  tokenLimitHandlerAction: '操作',
+  tokenLimitHandlerActionHint: '停止、使用简短提示继续，或发送自定义提示。',
+  tokenLimitHandlerContinue: '继续',
+  tokenLimitHandlerStop: '停止',
+  tokenLimitHandlerCustom: '自定义提示',
+  tokenLimitHandlerContinueCount: '连续继续次数',
+  tokenLimitHandlerContinueCountHint: '停止前最多连续发送多少次 `continue` 提示。默认：5。',
+  tokenLimitHandlerCustomPrompt: '自定义提示',
+  tokenLimitHandlerCustomPromptHint: '每次达到输出 token 限制时，作为下一条用户消息发送。',
   webSearchTitle: '网页搜索',
   webSearchDescription: 'DeepSeek 搜索提供方。',
   webSearchApiKey: 'API Key',

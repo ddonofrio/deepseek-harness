@@ -2494,6 +2494,27 @@ export interface Config {
 
 Source: [`packages/context/tmux-context/src/index.ts:34`](../packages/context/tmux-context/src/index.ts)
 
+<a id="deepseek-aidsh-token-limit-handler"></a>
+
+## `@deepseek-ai/dsh-token-limit-handler`
+
+```ts config-catalog
+/** Plugin configuration; omitted values use the default recovery policy. */
+export interface Config {
+  /** Response to an output-token limit; defaults to `continue`. */
+  action?: TokenLimitAction
+  /** Consecutive `continue` prompts; defaults to `5`. */
+  continueCount?: number
+  /** Prompt used by the `custom-prompt` action. */
+  customPrompt?: string
+}
+
+/** User-selectable response to an output-token limit. */
+export type TokenLimitAction = 'stop' | 'continue' | 'custom-prompt'
+```
+
+Source: [`packages/guard/token-limit-handler/src/index.ts:27`](../packages/guard/token-limit-handler/src/index.ts)
+
 <a id="deepseek-aidsh-token-meter"></a>
 
 ## `@deepseek-ai/dsh-token-meter`

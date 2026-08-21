@@ -8,7 +8,7 @@
 import type { Context } from '@deepseek-ai/cordis'
 import type { Scoped } from '@deepseek-ai/dsh-scope'
 import type { LlmCallConfig, LlmFailure, ResolvedRetryPolicy } from '@deepseek-ai/dsh-llm'
-import type { AgentCancelCause, Session, SessionId, UserMessage } from '@deepseek-ai/dsh-session'
+import type { AgentCancelCause, Session, SessionId, TurnEndReason, UserMessage } from '@deepseek-ai/dsh-session'
 export type { AgentCancelCause } from '@deepseek-ai/dsh-session'
 import type { Inbox } from './inbox.ts'
 import type { InboxTarget } from './types.ts'
@@ -255,6 +255,8 @@ declare module '@deepseek-ai/cordis' {
      * @param payload.agent - the agent making the model call.
      * @param payload.turn - the open turn number.
      * @param payload.step - the step whose request this is.
+     * @param payload.reason - the sticky result that will close the turn if no listener steers another step.
+     * @param payload.stepReason - the result of the latest completed step, before sticky turn accounting.
      * @param payload.signal - the current turn's explicit abort signal.
      * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
      * @mode waterfall
@@ -289,11 +291,13 @@ declare module '@deepseek-ai/cordis' {
      * closes only when that inbox drains.
      * @param payload.agent - the agent whose turn is at its stop boundary.
      * @param payload.turn - the turn about to close.
+     * @param payload.reason - the terminal reason retained for the turn.
+     * @param payload.stepReason - the result of the latest completed step before turn-level sticky accounting.
      * @param payload.signal - the current turn's explicit abort signal.
      * Scope-filtered dispatch (`@deepseek-ai/dsh-scope`): agent-scoped listeners receive only that agent.
      * @mode serial
      */
-    'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; signal: AbortSignal }): Promise<void> | void
+    'agent/turn-stopping'(this: Scoped<Agent>, payload: { agent: Agent; turn: number; reason: TurnEndReason; stepReason: TurnEndReason; signal: AbortSignal }): Promise<void> | void
     // ---- error notifications (emit) ----
     /**
      * A step or turn errored. The machine reports a failure here even when

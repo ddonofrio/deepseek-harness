@@ -328,7 +328,12 @@ describe('agentEvents()', () => {
       heard.push({ agent: subject, turn, signal: receivedSignal })
     })
 
-    await agentEvents(ctx, agent).serial('agent/turn-stopping', { turn: 3, signal })
+    await agentEvents(ctx, agent).serial('agent/turn-stopping', {
+      turn: 3,
+      reason: { kind: 'completed' },
+      stepReason: { kind: 'completed' },
+      signal,
+    })
 
     expect(heard).toEqual([{ agent, turn: 3, signal }])
   })

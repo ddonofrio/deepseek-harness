@@ -22,6 +22,7 @@ import { resolveSlotLabel } from '@deepseek-ai/dsh-client-ui-slots'
 import type {} from '@deepseek-ai/dsh-api-remotes/client'
 import { AgentLoopCard } from './AgentLoopCard.tsx'
 import { LoopDetectionRow } from './LoopDetectionRow.tsx'
+import { TokenLimitHandlerRow } from './TokenLimitHandlerRow.tsx'
 import { BashCard } from './BashCard.tsx'
 import { ConfigurablePluginsTab } from './ConfigurablePluginsTab.tsx'
 import { PluginsSettingsSection } from './PluginsSettingsSection.tsx'
@@ -30,6 +31,7 @@ import { WebSearchCard } from './WebSearchCard.tsx'
 import {
   AGENT_LOOP_NS, AgentLoopCardController, LoopDetectionRowController,
 } from './agent-loop-card-controller.ts'
+import { TOKEN_LIMIT_HANDLER_NS, TokenLimitHandlerRowController } from './token-limit-handler-controller.ts'
 import { SHELL_NS, BashCardController } from './bash-card-controller.ts'
 import { ConfigurablePluginsTabController } from './tab-store.ts'
 import { WEB_SEARCH_NS, WebSearchCardController } from './web-search-card-controller.ts'
@@ -47,6 +49,7 @@ export type {
 export type {
   AgentLoopCardFace, AgentLoopCardState, LoopDetectionRowFace, LoopDetectionRowState,
 } from './agent-loop-card-controller.ts'
+export type { TokenLimitHandlerRowFace, TokenLimitHandlerRowState } from './token-limit-handler-controller.ts'
 export type { BashCardFace, BashCardState } from './bash-card-controller.ts'
 export type { WebSearchCardFace, WebSearchCardState } from './web-search-card-controller.ts'
 
@@ -68,6 +71,7 @@ export function apply(ctx: ClientContext): void {
   const bash = new BashCardController(ctx.settingsScope.bind({ namespace: SHELL_NS }))
   const agentLoop = new AgentLoopCardController(ctx.settingsScope.bind({ namespace: AGENT_LOOP_NS }))
   const loopDetection = new LoopDetectionRowController(ctx.settingsScope.bind({ namespace: AGENT_LOOP_NS }))
+  const tokenLimitHandler = new TokenLimitHandlerRowController(ctx.settingsScope.bind({ namespace: TOKEN_LIMIT_HANDLER_NS }))
   const webSearch = new WebSearchCardController(ctx.settingsScope.bind({ namespace: WEB_SEARCH_NS }), api)
 
   // The credential a card reports is not part of any settings section, so its
@@ -180,4 +184,12 @@ export function apply(ctx: ClientContext): void {
     locale: NS,
     inject: () => loopDetection.inject(),
   }, LoopDetectionRow))
+
+  ctx.slots.inject('settings.general.item', () => ctx.slots.register({
+    name: 'settings.general.item',
+    id: 'token-limit-handler',
+    order: 40,
+    locale: NS,
+    inject: () => tokenLimitHandler.inject(),
+  }, TokenLimitHandlerRow))
 }
