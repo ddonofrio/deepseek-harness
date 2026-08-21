@@ -11,8 +11,8 @@ import type { Context } from '@deepseek-ai/cordis'
 import z from '@deepseek-ai/schemastery'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import { createUserMessage } from '@deepseek-ai/dsh-llm'
-import type { MessageSource } from '@deepseek-ai/dsh-llm'
-import type { TurnEndReason } from '@deepseek-ai/dsh-session'
+import type { ContentBlock, MessageSource } from '@deepseek-ai/dsh-llm'
+import type { SessionEvent, TurnEndReason } from '@deepseek-ai/dsh-session'
 import type { SubagentResult, SubagentRun } from '@deepseek-ai/dsh-subagent'
 import { installSettingsSection, settingsNamespace } from '@deepseek-ai/dsh-settings'
 import type { ObjectJsonSchema } from '@deepseek-ai/dsh-tools'
@@ -70,6 +70,9 @@ const COMPLETION_REVIEW_SCHEMA: ObjectJsonSchema = {
 
 type CompletionReview = { status: 'complete' | 'incomplete'; message: string }
 
+const REVIEW_PROMPT_MAX_CHARS = 12000
+const REVIEW_BLOCK_MAX_CHARS = 2000
+
 type TurnStoppingPayload = {
   agent: Agent
   turn: number
@@ -78,10 +81,97 @@ type TurnStoppingPayload = {
   signal: AbortSignal
 }
 
+function clipReviewText(text: string, maxChars = REVIEW_BLOCK_MAX_CHARS): string {
+  return text.length <= maxChars ? text : `${text.slice(0, maxChars)}… [truncated]`
+}
+
+function compactReviewContent(blocks: readonly ContentBlock[]): unknown[] {
+  return blocks.map((block) => {
+    switch (block.type) {
+      case 'text':
+      case 'reasoning':
+        return { type: block.type, text: clipReviewText(block.text) }
+      case 'tool-call':
+        return { type: block.type, name: block.name, arguments: clipReviewText(block.arguments) }
+      case 'tool-result':
+        return {
+          type: block.type,
+          toolCallId: block.toolCallId,
+          isError: block.isError,
+          content: compactReviewContent(block.content),
+        }
+      case 'image':
+        return { type: block.type, omitted: true }
+      default:
+        return { type: 'unknown' }
+    }
+  })
+}
+
+function compactReviewEvents(events: readonly SessionEvent[]): unknown[] {
+  return events.flatMap((event): unknown[] => {
+    switch (event.type) {
+      case 'turn/start':
+      case 'step/start':
+      case 'step/end':
+        return [{ seq: event.seq, type: event.type, data: event.data }]
+      case 'user/message':
+        return [{ seq: event.seq, type: event.type, content: compactReviewContent(event.data.content), source: event.data.source.kind === 'user' ? 'user' : event.data.source }]
+      case 'assistant/message':
+        return [{
+          seq: event.seq,
+          type: event.type,
+          turn: event.data.turn,
+          step: event.data.step,
+          content: compactReviewContent(event.data.message.content),
+          usage: event.data.usage,
+          interrupted: event.data.interrupted,
+        }]
+      case 'tool/call':
+        return [{
+          seq: event.seq,
+          type: event.type,
+          turn: event.data.turn,
+          step: event.data.step,
+          name: event.data.name,
+          arguments: clipReviewText(event.data.arguments),
+        }]
+      case 'tool/result':
+        return [{
+          seq: event.seq,
+          type: event.type,
+          turn: event.data.turn,
+          step: event.data.step,
+          message: { content: compactReviewContent(event.data.message.content) },
+          error: event.data.error,
+        }]
+      case 'todo/write':
+        return [{ seq: event.seq, type: event.type, todos: event.data.todos }]
+      default:
+        return []
+    }
+  })
+}
+
+function currentTurnEvents(agent: Agent, turn: number): SessionEvent[] {
+  const start = agent.session.events.findLastIndex(event => event.type === 'turn/start' && event.data.turn === turn)
+  return agent.session.events.slice(start < 0 ? 0 : start)
+}
+
+function isLoopRecoveryTurn(events: readonly SessionEvent[]): boolean {
+  return events.some(event => event.type === 'user/message'
+    && event.data.source.kind === 'plugin'
+    && event.data.source.plugin === 'agent-loop'
+    && event.data.source.form === 'notice'
+    && event.data.source.summary.startsWith('LLM loop detected'))
+}
+
 /** Prompt the reviewer to validate the user's request and the current turn. */
 function reviewPrompt(agent: Agent, turn: number): string {
-  const start = agent.session.events.findLastIndex(event => event.type === 'turn/start' && event.data.turn === turn)
-  const currentTurn = agent.session.events.slice(start < 0 ? 0 : start)
+  const serialized = JSON.stringify(compactReviewEvents(currentTurnEvents(agent, turn)))
+  const bounded = serialized.length <= REVIEW_PROMPT_MAX_CHARS
+    ? serialized
+    : `${serialized.slice(0, REVIEW_PROMPT_MAX_CHARS)}\n[remaining current-turn events omitted; use tools to verify details]`
   return [
     'Review the inherited conversation and the current turn before deciding whether the agent is finished.',
     'Check the original user request, the work performed, tool results, and the final answer.',
@@ -91,7 +181,7 @@ function reviewPrompt(agent: Agent, turn: number): string {
     'Use status "incomplete" with a concise, actionable message when the agent must continue.',
     '',
     'Current turn event log (JSON):',
-    JSON.stringify(currentTurn),
+    bounded,
   ].join('\n')
 }
 
@@ -144,6 +234,7 @@ export function apply(ctx: Context, config: Config): void {
   let disposeTurnStopping: (() => void) | undefined
   const onTurnStopping = async ({ agent, turn, reason, signal }: TurnStoppingPayload) => {
     if (reason.kind !== 'completed' || !source().enabled || activeParents.has(agent) || checkerAgents.has(agent)) return
+    if (isLoopRecoveryTurn(currentTurnEvents(agent, turn))) return
     const parentSession = agent.session.header.parentSession
     const parent = parentSession === undefined ? undefined : ctx.agents.get(parentSession)
     if (parent !== undefined && activeParents.has(parent)) return

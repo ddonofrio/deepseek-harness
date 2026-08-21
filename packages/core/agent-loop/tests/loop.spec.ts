@@ -256,6 +256,11 @@ describe('agent loop', () => {
       content: [{ type: 'text', text: '<continue>' }],
     })
     expect(agent.session.events.filter(event => event.type === 'compaction/end')).toHaveLength(1)
+    expect(agent.session.events.some(event => event.type === 'user/message'
+      && event.data.source.kind === 'plugin'
+      && event.data.source.plugin === 'agent-loop'
+      && event.data.content.some(block => block.type === 'text'
+        && block.text.includes('Compacting context before retrying')))).toBe(true)
     const turnEnds = agent.session.events.filter(event => event.type === 'turn/end')
     expect(turnEnds[0]).toMatchObject({
       type: 'turn/end',

@@ -30,6 +30,8 @@ completion checker 会在普通轮次完成、轮次关闭之前，使用一次�
 
 ## Model Experience
 
+当前轮次事件摘要有长度上限；大型消息或工具结果区块在进入复核提示词前会被截断。包含 agent-loop 循环恢复通知的轮次会跳过复核，因此循环恢复与完成度复核不会同时运行。
+
 ### 完成度复核
 
 #### What the model sees

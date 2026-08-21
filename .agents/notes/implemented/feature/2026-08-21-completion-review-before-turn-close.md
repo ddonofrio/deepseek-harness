@@ -29,3 +29,5 @@ The `completion-checker` settings namespace exposes `enabled`, defaults it to `t
 The user may see one additional agent step when the reviewer finds missing work, while the review itself remains a child activity rather than a second assistant answer in the parent transcript. Review failures do not block a response, so the feature improves completeness opportunistically and does not become a new provider availability requirement after composition succeeds.
 
 The reviewer inherits the parent's tools and may use them to verify claims. Recursive checking is suppressed by tracking the parent and reviewer agent identities in memory; this state is intentionally not durable because it coordinates one live terminal checkpoint only.
+
+The current-turn supplement is a bounded event summary rather than a lossless log, so large tool results cannot exhaust the reviewer's context. Turns carrying an agent-loop recovery notice are excluded from completion review; automatic loop compaction records its own visible notice before maintenance starts.

@@ -18,6 +18,11 @@ interface ReviewHarness {
   readonly disposes: ReturnType<typeof vi.fn>[]
 }
 
+interface HarnessOptions {
+  readonly loopRecoveryNotice?: boolean
+  readonly largeCurrentTurnMessage?: boolean
+}
+
 const contexts: Context[] = []
 
 afterEach(async () => {
@@ -25,7 +30,11 @@ afterEach(async () => {
 })
 
 /** Mount the real loop with a deterministic subagent seam. */
-async function harness(reviews: unknown[], config: CompletionChecker.Config = {}): Promise<ReviewHarness> {
+async function harness(
+  reviews: unknown[],
+  config: CompletionChecker.Config = {},
+  options: HarnessOptions = {},
+): Promise<ReviewHarness> {
   const ctx = new Context()
   contexts.push(ctx)
   await mountAgentLoopTestDependencies(ctx)
@@ -52,6 +61,20 @@ async function harness(reviews: unknown[], config: CompletionChecker.Config = {}
     },
   } as never)
   await ctx.plugin(AgentLoop, { agents: [] })
+  if (options.loopRecoveryNotice || options.largeCurrentTurnMessage) {
+    ctx.on('agent/turn-stopping', ({ agent: subject }) => {
+      const text = options.largeCurrentTurnMessage ? 'x'.repeat(200000) : 'LLM loop detected × 3'
+      subject.session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text }],
+        source: {
+          kind: 'plugin',
+          plugin: 'agent-loop',
+          form: 'notice',
+          summary: options.largeCurrentTurnMessage ? 'large test notice' : 'LLM loop detected × 3',
+        },
+      }), { surfaceOp: 'append' })
+    })
+  }
   await ctx.plugin(CompletionChecker, config)
   const adapter = new MockAdapter(Array.from(
     { length: Math.max(1, reviews.length) },
@@ -131,6 +154,26 @@ describe('completion-checker', () => {
     await waitForIdle(ctx, agent)
 
     expect(starts).toHaveLength(0)
+  })
+
+  it('does not review a turn already being recovered by the loop guard', async () => {
+    const { ctx, agent, starts } = await harness([{ status: 'complete', message: '' }], {}, { loopRecoveryNotice: true })
+    start(agent)
+    await waitForIdle(ctx, agent)
+
+    expect(starts).toHaveLength(0)
+  })
+
+  it('bounds the current-turn review context', async () => {
+    const { ctx, agent, starts } = await harness([{ status: 'complete', message: '' }], {}, { largeCurrentTurnMessage: true })
+    start(agent)
+    await waitForIdle(ctx, agent)
+
+    const prompt = starts[0]?.prompt[0]
+    expect(prompt).toMatchObject({ type: 'text' })
+    const text = (prompt as { type: 'text'; text: string }).text
+    expect(text.length).toBeLessThan(14000)
+    expect(text).toContain('[truncated]')
   })
 
   it('fails open for an invalid reviewer result', async () => {

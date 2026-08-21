@@ -79,6 +79,19 @@ interface PendingLoopCompaction {
   readonly compaction: CompactionEngine
 }
 
+/** Build the visible notice shown while automatic loop recovery compacts history. */
+function loopCompactionMessage(): UserMessage {
+  return createUserMessage({
+    content: [{ type: 'text', text: 'Repeated model output detected. Compacting context before retrying…' }],
+    source: {
+      kind: 'plugin',
+      plugin: 'agent-loop',
+      form: 'notice',
+      summary: 'compacting after repeated loop',
+    },
+  })
+}
+
 /** Internal control flow that ends the failed turn before automatic compaction. */
 class LoopCompactionRequested extends Error {
   override readonly name = 'LoopCompactionRequested'
@@ -291,6 +304,7 @@ export class ReactLoopAgent implements Agent {
   /** Run loop recovery through the same idle maintenance path as `/compact`. */
   private async finishLoopCompaction(pending: PendingLoopCompaction): Promise<void> {
     try {
+      this.session.append('user/message', loopCompactionMessage(), { surfaceOp: 'append' })
       const result = await pending.compaction.compactNow(this, new AbortController().signal)
       if (result === null) {
         this.reportError(new LlmError('LLM in infinite loop.', 'LLM_LOOP'))

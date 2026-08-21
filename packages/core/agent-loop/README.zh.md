@@ -62,7 +62,7 @@ interface Config {
 
 启用 `compactBeforeFailing` 后，第四次检测会结束失败的轮次，等待 driver 进入 idle，然后调用已加载的 `ctx.compaction` 提供方的 `compactNow` 路径。独立维护操作完成前，唤醒输入会保留在队列中。成功替换会将原始轮次输入放到 `next-turn` 队首，并在新的轮次中派发；没有有效范围或后端失败仍会结束循环。
 
-General 设置还会通过 `loopDetectionCompactBeforeFailing` 暴露该选项，以及现有的循环检测字段。
+General 设置还会通过 `loopDetectionCompactBeforeFailing` 暴露该选项，以及现有的循环检测字段。自动循环恢复会先记录可见的压缩通知；完成度复核会跳过包含循环恢复通知的轮次。
 
 ### 包内部具体驱动器
 

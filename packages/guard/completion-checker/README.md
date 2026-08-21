@@ -30,6 +30,8 @@ The reviewer's child is one-shot and is disposed after its result settles. The c
 
 ## Model Experience
 
+The current-turn event summary is bounded and large message or tool-result blocks are truncated before they reach the reviewer prompt. Turns containing the agent-loop's loop-recovery notice are skipped so loop recovery and completion review do not run together.
+
 ### Completion review
 
 #### What the model sees
