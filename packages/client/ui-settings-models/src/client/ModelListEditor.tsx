@@ -291,15 +291,12 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
   }
 
   const activeCandidates = candidates ?? []
-  const allCandidatesPicked = activeCandidates.length > 0
-    && activeCandidates.every(candidate => picked.has(candidate.id))
+  const selectAllCandidates = (): void => {
+    setPicked(new Set(activeCandidates.map(candidate => candidate.id)))
+  }
 
-  const toggleAllCandidates = (): void => {
-    setPicked((current) => {
-      return activeCandidates.every(candidate => current.has(candidate.id))
-        ? new Set()
-        : new Set(activeCandidates.map(candidate => candidate.id))
-    })
+  const deselectAllCandidates = (): void => {
+    setPicked(new Set())
   }
 
   // A route the adapter already describes answers without an endpoint; only a
@@ -453,17 +450,14 @@ export function ModelListEditor(props: ModelListEditorProps): ReactNode {
         footer={(
           <div className={styles['fetchFooter']}>
             <div className={styles['fetchFooterGroup']}>
+              <Button variant="ghost" size="sm" onClick={selectAllCandidates}>{t('fetchSelectAll')}</Button>
+              <Button variant="ghost" size="sm" onClick={deselectAllCandidates}>{t('fetchDeselectAll')}</Button>
               <Button variant="outline" onClick={closePicker}>{t('cancel')}</Button>
               <Button variant="outline" onClick={adoptPicked}>{t('fetchAdopt')}</Button>
             </div>
           </div>
         )}
       >
-        <div className={styles['candidateActions']}>
-          <Button variant="ghost" size="sm" onClick={toggleAllCandidates}>
-            {t(allCandidatesPicked ? 'fetchDeselectAll' : 'fetchSelectAll')}
-          </Button>
-        </div>
         <ul className={styles['candidateList']}>
           {(candidates ?? []).map(candidate => (
             <li key={candidate.id} className={styles['candidate']}>

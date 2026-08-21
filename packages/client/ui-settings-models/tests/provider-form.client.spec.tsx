@@ -608,7 +608,7 @@ describe('endpoint interrogation', () => {
     expect(firstMutate(mutate).ops[0]?.value).toEqual([{ id: 'a' }, { id: 'b', maxTokens: 2048 }])
   })
 
-  it('selects and clears every discovered candidate in one action', async () => {
+  it('selects and clears every discovered candidate from the footer actions', async () => {
     const discover = vi.fn(() => Promise.resolve(ok({
       models: [{ id: 'a' }, { id: 'b' }, { id: 'c' }],
     })))
@@ -619,6 +619,8 @@ describe('endpoint interrogation', () => {
     const dialog = await screen.findByRole('dialog')
     const boxes = [...dialog.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')]
     expect(boxes.map(box => box.checked)).toEqual([true, true, true])
+    expect([...dialog.querySelectorAll('button')].filter(button => button.textContent === en.fetchSelectAll)).toHaveLength(1)
+    expect([...dialog.querySelectorAll('button')].filter(button => button.textContent === en.fetchDeselectAll)).toHaveLength(1)
 
     fireEvent.click(within_(dialog, en.fetchDeselectAll))
     expect(boxes.map(box => box.checked)).toEqual([false, false, false])
