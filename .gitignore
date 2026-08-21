@@ -37,5 +37,5 @@ apps/web/dist/
 .orig
 .worktrees/
 worktrees/
-.agents/worktrees/
+.agents/
 .typert-*/
