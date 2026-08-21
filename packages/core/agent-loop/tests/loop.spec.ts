@@ -220,11 +220,19 @@ describe('agent loop', () => {
       model: 'mock',
       loopDetection: { enabled: true, compactBeforeFailing: true },
     })
-    // Web presets mount compaction beneath the agent scope rather than at the host.
-    const compaction = new LoopCompactionEngine(agent.ctx)
+    const isolatedContext = agent.ctx.isolate('compaction')
+    const compaction = new LoopCompactionEngine(isolatedContext)
+    const disposeAgentPresetLookup = ctx.reflect.provide('agentPresets', {
+      serviceFor(subject: Agent, name: string) {
+        return subject === agent && name === 'compaction'
+          ? isolatedContext.get('compaction')
+          : undefined
+      },
+    })
 
     send(agent, 'answer this')
     await waitForIdle(ctx, agent)
+    disposeAgentPresetLookup()
 
     expect(compaction.calls).toBe(1)
     expect(adapter.requests).toHaveLength(6)

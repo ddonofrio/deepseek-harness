@@ -33,7 +33,7 @@ import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, Us
 import { canonicalHeader, headerEquals } from '@deepseek-ai/dsh-session'
 import { joinContextSections, renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
-import type {} from '@deepseek-ai/dsh-compaction'
+import type { CompactionEngine } from '@deepseek-ai/dsh-compaction'
 import type { Context } from '@deepseek-ai/cordis'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
@@ -67,6 +67,11 @@ interface ResolvedLoopDetectionOptions {
   secondPrompt: string
   thirdPrompt: string
   compactBeforeFailing: boolean
+}
+
+/** Optional host reader for services isolated inside an agent preset. */
+interface AgentPresetServiceLookup {
+  serviceFor(agent: { ctx: Context }, name: string): CompactionEngine | undefined
 }
 
 function resolveLoopDetection(options: LoopDetectionOptions | undefined): ResolvedLoopDetectionOptions {
@@ -422,8 +427,11 @@ export class ReactLoopAgent implements Agent {
           this.consecutiveLoopDetections += 1
           if (this.consecutiveLoopDetections >= 4) {
             if (this.loopDetection.compactBeforeFailing) {
-              // Web presets provide compaction in the agent scope, not the host.
+              // Preset groups isolate their services from both the host and the
+              // agent context; the preset registry addresses the joined instance.
               const compaction = this.ctx.get('compaction')
+                ?? (this.loopCtx.reflect.get('agentPresets') as AgentPresetServiceLookup | undefined)
+                  ?.serviceFor(this, 'compaction')
               if (compaction !== undefined) {
                 const compacted = await compaction.compactIfNeeded(this, 'loop-detection', signal) !== null
                 signal.throwIfAborted()
