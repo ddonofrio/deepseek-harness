@@ -14,6 +14,7 @@ import type {
   AgentFactory,
   AgentHandle,
   AgentOptions,
+  LoopDetectionOptions,
   AgentSetup,
   CreateAgentOptions,
   ResumeAgentOptions,
@@ -138,11 +139,65 @@ function resolveMaxParallelToolCalls(value: number | undefined): number {
   return maxParallelToolCalls
 }
 
+/** The user-facing agent-loop defaults shared by Host settings and agents. */
+const DEFAULT_LOOP_DETECTION: Required<LoopDetectionOptions> = {
+  enabled: false,
+  includeLoop: true,
+  minTokens: 5,
+  firstPrompt: '<continue>',
+  secondPrompt: '<You are in a loop, please output the response now>',
+  thirdPrompt: "<Please stop. Explain the user's current status; do not continue with your task>",
+}
+
+/** Project the flat General setting fields into one agent option. */
+function loopDetectionFromSettings(settings: AgentLoopSettings): Required<LoopDetectionOptions> {
+  return {
+    enabled: settings.loopDetectionEnabled,
+    includeLoop: settings.loopDetectionIncludeLoop,
+    minTokens: settings.loopDetectionMinTokens,
+    firstPrompt: settings.loopDetectionFirstPrompt,
+    secondPrompt: settings.loopDetectionSecondPrompt,
+    thirdPrompt: settings.loopDetectionThirdPrompt,
+  }
+}
+
+/** Apply General defaults while preserving explicit per-agent overrides. */
+function resolveAgentOptions(options: AgentOptions, settings: AgentLoopSettings): AgentOptions {
+  const configured = loopDetectionFromSettings(settings)
+  const usesDefaultPolicy = configured.enabled === DEFAULT_LOOP_DETECTION.enabled
+    && configured.includeLoop === DEFAULT_LOOP_DETECTION.includeLoop
+    && configured.minTokens === DEFAULT_LOOP_DETECTION.minTokens
+    && configured.firstPrompt === DEFAULT_LOOP_DETECTION.firstPrompt
+    && configured.secondPrompt === DEFAULT_LOOP_DETECTION.secondPrompt
+    && configured.thirdPrompt === DEFAULT_LOOP_DETECTION.thirdPrompt
+  if (options.loopDetection === undefined && usesDefaultPolicy) return options
+  return {
+    ...options,
+    loopDetection: {
+      ...configured,
+      ...options.loopDetection,
+    },
+  }
+}
+
 /** Reject an output-token cap that cannot be represented exactly on the request wire. */
 function assertAgentOptions(options: AgentOptions): void {
   if (options.maxTokens !== undefined
     && (!Number.isSafeInteger(options.maxTokens) || options.maxTokens <= 0)) {
     throw new TypeError('agent maxTokens must be a positive safe integer')
+  }
+  const loopDetection = options.loopDetection
+  if (loopDetection === undefined) return
+  if (loopDetection.minTokens !== undefined
+    && (!Number.isSafeInteger(loopDetection.minTokens) || loopDetection.minTokens < 1)) {
+    throw new TypeError('agent loopDetection.minTokens must be a positive safe integer')
+  }
+  for (const [name, prompt] of [
+    ['firstPrompt', loopDetection.firstPrompt],
+    ['secondPrompt', loopDetection.secondPrompt],
+    ['thirdPrompt', loopDetection.thirdPrompt],
+  ] as const) {
+    if (prompt !== undefined && prompt.length === 0) throw new TypeError(`agent loopDetection.${name} must not be empty`)
   }
 }
 
@@ -233,7 +288,7 @@ function applyLauncherIdentities(
   })
 }
 
-/** Settings namespace carrying the tool-call parallelism a user owns. */
+/** Settings namespace carrying the user-owned agent-loop policy. */
 export const AGENT_LOOP_SETTINGS_NAMESPACE = settingsNamespace('agent-loop')
 
 /**
@@ -244,11 +299,29 @@ export const AGENT_LOOP_SETTINGS_NAMESPACE = settingsNamespace('agent-loop')
 export interface AgentLoopSettings {
   /** Maximum parallel-safe calls in flight per agent step. */
   maxParallelToolCalls: number
+  /** Whether repeated model output should trigger loop recovery. */
+  loopDetectionEnabled: boolean
+  /** Whether the repeated partial assistant output remains visible in history. */
+  loopDetectionIncludeLoop: boolean
+  /** Minimum token-like units in the repeated block. */
+  loopDetectionMinTokens: number
+  /** Prompt injected after the first detected loop. */
+  loopDetectionFirstPrompt: string
+  /** Prompt injected after the second detected loop. */
+  loopDetectionSecondPrompt: string
+  /** Prompt injected after the third detected loop. */
+  loopDetectionThirdPrompt: string
 }
 
 /** Schema of the agent-loop settings section. */
 export const AGENT_LOOP_SETTINGS_SCHEMA: z<AgentLoopSettings> = z.object({
   maxParallelToolCalls: z.number().step(1).min(1).default(DEFAULT_MAX_PARALLEL_TOOL_CALLS),
+  loopDetectionEnabled: z.boolean().default(DEFAULT_LOOP_DETECTION.enabled),
+  loopDetectionIncludeLoop: z.boolean().default(DEFAULT_LOOP_DETECTION.includeLoop),
+  loopDetectionMinTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(DEFAULT_LOOP_DETECTION.minTokens),
+  loopDetectionFirstPrompt: z.string().default(DEFAULT_LOOP_DETECTION.firstPrompt),
+  loopDetectionSecondPrompt: z.string().default(DEFAULT_LOOP_DETECTION.secondPrompt),
+  loopDetectionThirdPrompt: z.string().default(DEFAULT_LOOP_DETECTION.thirdPrompt),
 })
 
 /** Agent-loop plugin configuration. */
@@ -305,6 +378,14 @@ export class AgentLoop extends Service implements AgentFactory {
       provider: z.string(),
       model: z.string(),
       maxTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER),
+      loopDetection: z.object({
+        enabled: z.boolean().default(false),
+        includeLoop: z.boolean().default(true),
+        minTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(5),
+        firstPrompt: z.string().default('<continue>'),
+        secondPrompt: z.string().default('<You are in a loop, please output the response now>'),
+        thirdPrompt: z.string().default("<Please stop. Explain the user's current status; do not continue with your task>"),
+      }),
       cwd: z.string(),
       resumeSessionId: z.string(),
     })).default([]),
@@ -313,6 +394,8 @@ export class AgentLoop extends Service implements AgentFactory {
   /** Validated configuration owned by the agent-loop service. */
   readonly config: ResolvedConfig
   private readonly ownership: FactoryOwnership
+  private settingsSource: () => AgentLoopSettings = () => this.settingsEntry
+  private readonly settingsEntry: AgentLoopSettings
   /** Plain holder prevents Cordis from re-tracing the factory's dependency context through a caller shadow. */
   private readonly runtime: { ctx: Context }
 
@@ -320,7 +403,14 @@ export class AgentLoop extends Service implements AgentFactory {
     super(ctx, 'agentLoop')
     const entry: AgentLoopSettings = {
       maxParallelToolCalls: resolveMaxParallelToolCalls(config.maxParallelToolCalls),
+      loopDetectionEnabled: DEFAULT_LOOP_DETECTION.enabled,
+      loopDetectionIncludeLoop: DEFAULT_LOOP_DETECTION.includeLoop,
+      loopDetectionMinTokens: DEFAULT_LOOP_DETECTION.minTokens,
+      loopDetectionFirstPrompt: DEFAULT_LOOP_DETECTION.firstPrompt,
+      loopDetectionSecondPrompt: DEFAULT_LOOP_DETECTION.secondPrompt,
+      loopDetectionThirdPrompt: DEFAULT_LOOP_DETECTION.thirdPrompt,
     }
+    this.settingsEntry = entry
     let source: () => AgentLoopSettings = () => entry
     this.config = {
       ...config,
@@ -339,6 +429,7 @@ export class AgentLoop extends Service implements AgentFactory {
       validate: value => void resolveMaxParallelToolCalls(value.maxParallelToolCalls),
       setSource: (current) => {
         source = current
+        this.settingsSource = current
       },
       // Nothing is derived from the cap: the getter above is the only reader.
       onChange: () => {},
@@ -457,7 +548,8 @@ export class AgentLoop extends Service implements AgentFactory {
    * fuses caller cancellation with lifecycle teardown for setup awaits.
    */
   private prepare(ownerCtx: Context, id: SessionId, options: AgentOptions, session: Session, callerSignal?: AbortSignal): PreparedAgent {
-    assertAgentOptions(options)
+    const effectiveOptions = resolveAgentOptions(options, this.settingsSource())
+    assertAgentOptions(effectiveOptions)
     ownerCtx.fiber.assertActive()
     // Every caller reaches prepare() synchronously from a service method
     // whose Cordis dispatch already requires the live factory fiber, or
@@ -546,7 +638,7 @@ export class AgentLoop extends Service implements AgentFactory {
       throw abort.signal.reason instanceof Error ? abort.signal.reason : new Error(String(abort.signal.reason))
     }
     try {
-      const agent = machine = new ReactLoopAgent(loopCtx, id, options, session)
+      const agent = machine = new ReactLoopAgent(loopCtx, id, effectiveOptions, session)
       machineReady.resolve()
       assertLive()
 

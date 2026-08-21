@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { Context } from '@deepseek-ai/cordis'
 import type { Fiber } from '@deepseek-ai/cordis'
 import LlmRuntime from '@deepseek-ai/dsh-llm'
-import SessionStore from '@deepseek-ai/dsh-session'
+import SessionStore, { SessionId } from '@deepseek-ai/dsh-session'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import AgentRegistry from '@deepseek-ai/dsh-agent'
@@ -70,7 +70,15 @@ describe('agent-loop settings section', () => {
 
     const descriptor = bench.ctx.settings.describe().find(row => String(row.ns) === 'agent-loop')
 
-    expect(Object.keys(descriptor?.value as object)).toEqual(['maxParallelToolCalls'])
+    expect(Object.keys(descriptor?.value as object)).toEqual([
+      'maxParallelToolCalls',
+      'loopDetectionEnabled',
+      'loopDetectionIncludeLoop',
+      'loopDetectionMinTokens',
+      'loopDetectionFirstPrompt',
+      'loopDetectionSecondPrompt',
+      'loopDetectionThirdPrompt',
+    ])
     await bench.ctx.fiber.dispose()
   })
 
@@ -80,6 +88,32 @@ describe('agent-loop settings section', () => {
     await bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, { maxParallelToolCalls: 2 })
 
     expect(bench.ctx.agentLoop.config.agents).toEqual([])
+    await bench.ctx.fiber.dispose()
+  })
+
+  it('uses the General loop policy for agents without an explicit override', async () => {
+    const bench = await boot()
+    await bench.ctx.settings.update(AGENT_LOOP_SETTINGS_NAMESPACE, {
+      loopDetectionEnabled: true,
+      loopDetectionIncludeLoop: false,
+      loopDetectionMinTokens: 7,
+      loopDetectionFirstPrompt: 'first',
+      loopDetectionSecondPrompt: 'second',
+      loopDetectionThirdPrompt: 'third',
+    })
+
+    const agent = bench.ctx.agentLoop.create(SessionId('settings-loop-agent'), {
+      provider: 'mock',
+      model: 'mock',
+    })
+    expect(agent.options.loopDetection).toEqual({
+      enabled: true,
+      includeLoop: false,
+      minTokens: 7,
+      firstPrompt: 'first',
+      secondPrompt: 'second',
+      thirdPrompt: 'third',
+    })
     await bench.ctx.fiber.dispose()
   })
 

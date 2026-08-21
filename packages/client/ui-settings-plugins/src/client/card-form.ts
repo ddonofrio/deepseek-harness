@@ -129,6 +129,24 @@ export function numberField(field: string): CardFieldSpec {
 }
 
 /**
+ * A boolean field represented by the compact `on` / `off` vocabulary.
+ * @param field - field name inside the settings section.
+ * @returns the field conversion specification.
+ */
+export function booleanField(field: string): CardFieldSpec {
+  return {
+    field,
+    format: value => value === true ? 'on' : value === false ? 'off' : '',
+    parse: (text) => {
+      const normalized = text.trim().toLowerCase()
+      if (normalized === 'on') return { kind: 'set', value: true }
+      if (normalized === 'off') return { kind: 'set', value: false }
+      return undefined
+    },
+  }
+}
+
+/**
  * A free-text field. An empty draft clears the field, so emptying the control
  * and saving is the same gesture as resetting it.
  * @param field - field name inside the namespace section.

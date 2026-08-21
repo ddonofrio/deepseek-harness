@@ -8,6 +8,10 @@ export type PluginsSettingsLocaleKey =
   | 'bashTitle' | 'bashDescription' | 'bashTimeoutMs' | 'bashTimeoutMsHint'
   | 'bashMaxOutputBytes' | 'bashMaxOutputBytesHint'
   | 'agentLoopTitle' | 'agentLoopDescription' | 'agentLoopMaxParallel' | 'agentLoopMaxParallelHint'
+  | 'loopDetectionTitle' | 'loopDetectionDescription' | 'loopDetectionEnabled' | 'loopDetectionIncludeLoop'
+  | 'loopDetectionMinTokens' | 'loopDetectionMinTokensHint' | 'loopDetectionFirstPrompt'
+  | 'loopDetectionSecondPrompt' | 'loopDetectionThirdPrompt' | 'loopDetectionPromptHint'
+  | 'loopDetectionOn' | 'loopDetectionOff' | 'loopDetectionYes' | 'loopDetectionNo'
   | 'webSearchTitle' | 'webSearchDescription'
   | 'webSearchApiKey' | 'webSearchApiKeyHint' | 'webSearchApiKeySet' | 'webSearchApiKeyUnset'
   | 'webSearchBaseUrl' | 'webSearchBaseUrlHint' | 'webSearchMaxUses' | 'webSearchMaxUsesHint'
@@ -41,6 +45,20 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'How the agent dispatches tool calls.',
   agentLoopMaxParallel: 'Parallel tool calls',
   agentLoopMaxParallelHint: 'Upper bound on parallel-safe calls running at once within one step.',
+  loopDetectionTitle: 'LLM loop detection',
+  loopDetectionDescription: 'Stops repeated model output and asks the agent to recover.',
+  loopDetectionEnabled: 'Detection',
+  loopDetectionIncludeLoop: 'Include detected loop in the answer',
+  loopDetectionMinTokens: 'Minimum repeated tokens',
+  loopDetectionMinTokensHint: 'A block must repeat three times at the end of the response.',
+  loopDetectionFirstPrompt: 'First recovery prompt',
+  loopDetectionSecondPrompt: 'Second recovery prompt',
+  loopDetectionThirdPrompt: 'Third recovery prompt',
+  loopDetectionPromptHint: 'Sent as the next user message after a consecutive loop detection.',
+  loopDetectionOn: 'On',
+  loopDetectionOff: 'Off',
+  loopDetectionYes: 'Yes',
+  loopDetectionNo: 'No',
   webSearchTitle: 'Web search',
   webSearchDescription: 'The DeepSeek search provider.',
   webSearchApiKey: 'API key',
@@ -82,6 +100,20 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   agentLoopDescription: 'Agent 如何派发工具调用。',
   agentLoopMaxParallel: '并行工具调用数',
   agentLoopMaxParallelHint: '同一步内最多同时运行多少个可并行的调用。',
+  loopDetectionTitle: 'LLM 循环检测',
+  loopDetectionDescription: '停止重复的模型输出，并请 agent 恢复。',
+  loopDetectionEnabled: '检测',
+  loopDetectionIncludeLoop: '在回答中包含检测到的循环',
+  loopDetectionMinTokens: '重复 token 最小数',
+  loopDetectionMinTokensHint: '一个块必须在回答末尾连续重复三次。',
+  loopDetectionFirstPrompt: '第一次恢复提示词',
+  loopDetectionSecondPrompt: '第二次恢复提示词',
+  loopDetectionThirdPrompt: '第三次恢复提示词',
+  loopDetectionPromptHint: '每次连续检测到循环后，作为下一条用户消息发送。',
+  loopDetectionOn: '开',
+  loopDetectionOff: '关',
+  loopDetectionYes: '是',
+  loopDetectionNo: '否',
   webSearchTitle: '网页搜索',
   webSearchDescription: 'DeepSeek 搜索提供方。',
   webSearchApiKey: 'API Key',

@@ -50,6 +50,97 @@ function userTexts(agent: Agent): string[] {
 }
 
 describe('agent loop', () => {
+  it('cuts a repeated model response and continues with the configured escalation prompts', async () => {
+    const adapter = new MockAdapter([
+      textResponse('alpha beta gamma delta epsilon alpha beta gamma delta epsilon alpha beta gamma delta epsilon'),
+      textResponse('recovered'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-recovery'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true, minTokens: 5 },
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(2)
+    expect(adapter.requests[1]?.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: '<continue>' }],
+    })
+    expect(userTexts(agent)).toContain('<continue>')
+    expect(agent.session.events.filter(event => event.type === 'assistant/message')).toHaveLength(2)
+  })
+
+  it('fails the agent after four consecutive repeated responses', async () => {
+    const adapter = new MockAdapter([
+      textResponse('a b c d e a b c d e a b c d e'),
+      textResponse('a b c d e a b c d e a b c d e'),
+      textResponse('a b c d e a b c d e a b c d e'),
+      textResponse('a b c d e a b c d e a b c d e'),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-error'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true },
+    })
+    const errors: unknown[] = []
+    ctx.on('agent/error', ({ agent: subject, error }) => {
+      if (subject === agent) errors.push(error)
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatchObject({ message: 'LLM in infinite loop.', code: 'LLM_LOOP' })
+    expect(adapter.requests).toHaveLength(4)
+    expect(adapter.requests.slice(1).map(request => request.messages.at(-1)?.content)).toEqual([
+      [{ type: 'text', text: '<continue>' }],
+      [{ type: 'text', text: '<You are in a loop, please output the response now>' }],
+      [{ type: 'text', text: "<Please stop. Explain the user's current status; do not continue with your task>" }],
+    ])
+  })
+
+  it('can omit the partial loop and use custom escalation prompts', async () => {
+    const repeated = 'a b c d e a b c d e a b c d e'
+    const adapter = new MockAdapter([textResponse(repeated), textResponse('recovered')])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-custom'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: {
+        enabled: true,
+        includeLoop: false,
+        firstPrompt: 'first intervention',
+      },
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests[1]?.messages.at(-1)).toMatchObject({
+      content: [{ type: 'text', text: 'first intervention' }],
+    })
+    expect(agent.session.events.filter(event => event.type === 'assistant/message')).toHaveLength(1)
+  })
+
+  it('keeps detection disabled by default', async () => {
+    const repeated = 'a b c d e a b c d e a b c d e'
+    const adapter = new MockAdapter([textResponse(repeated)])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-off'), { provider: 'mock', model: 'mock' })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(adapter.requests).toHaveLength(1)
+    expect(userTexts(agent)).toEqual(['answer this'])
+  })
+
   it.each([0, -1, 1.5, Number.NaN, Number.MAX_SAFE_INTEGER + 1])(
     'rejects invalid AgentOptions.maxTokens %s before publication',
     async (maxTokens) => {

@@ -20,6 +20,22 @@ declare module '@deepseek-ai/dsh-system-prompt' {
   }
 }
 
+/** Per-agent policy for detecting repeated model output. */
+export interface LoopDetectionOptions {
+  /** Enable repeated-output detection for this agent. Defaults to `false`. */
+  enabled?: boolean
+  /** Preserve the partial repeated output as an assistant message. Defaults to `true`. */
+  includeLoop?: boolean
+  /** Minimum token-like units in the repeated block. Defaults to `5`. */
+  minTokens?: number
+  /** Prompt sent after the first consecutive detection. */
+  firstPrompt?: string
+  /** Prompt sent after the second consecutive detection. */
+  secondPrompt?: string
+  /** Prompt sent after the third consecutive detection. */
+  thirdPrompt?: string
+}
+
 /** Merge-extensible agent creation options. Persona belongs to system-prompt sections. */
 export interface AgentOptions {
   /** Provider route (must have a registered adapter at call time). */
@@ -28,6 +44,8 @@ export interface AgentOptions {
   model?: string
   /** Maximum output tokens for each conversation-model request. */
   maxTokens?: number
+  /** Optional repeated-model-output protection policy. */
+  loopDetection?: LoopDetectionOptions
 }
 
 /** Options for {@link Agent.cancel}. */

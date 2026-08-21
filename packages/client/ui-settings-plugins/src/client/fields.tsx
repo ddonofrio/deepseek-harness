@@ -87,6 +87,73 @@ export function ValueField(props: FieldProps & {
   )
 }
 
+/** A compact staged select for the small `on` / `off` settings vocabulary. */
+export function SelectField(props: FieldProps & {
+  options: readonly { value: string; label: string }[]
+}) {
+  return (
+    <div className={css.field}>
+      <div className={css.head}>
+        <label className={css.label} htmlFor={props.id}>{props.label}</label>
+        {props.overridden
+          ? (
+            <span className={css.badges}>
+              <span className={css.badge}>{props.overriddenLabel}</span>
+              <button type="button" className={css.reset} disabled={props.disabled} onClick={props.onReset}>
+                {props.resetLabel}
+              </button>
+            </span>
+          )
+          : null}
+      </div>
+      <select
+        id={props.id}
+        className={props.invalid ? css.inputInvalid : css.input}
+        value={props.text}
+        disabled={props.disabled}
+        onChange={(event) => { props.onEdit(event.target.value) }}
+      >
+        {props.options.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+      </select>
+      <p className={props.invalid ? css.invalid : css.hint}>
+        {props.invalid ? props.invalidLabel : props.hint}
+      </p>
+    </div>
+  )
+}
+
+/** A staged multiline prompt field. */
+export function TextAreaField(props: FieldProps) {
+  return (
+    <div className={css.field}>
+      <div className={css.head}>
+        <label className={css.label} htmlFor={props.id}>{props.label}</label>
+        {props.overridden
+          ? (
+            <span className={css.badges}>
+              <span className={css.badge}>{props.overriddenLabel}</span>
+              <button type="button" className={css.reset} disabled={props.disabled} onClick={props.onReset}>
+                {props.resetLabel}
+              </button>
+            </span>
+          )
+          : null}
+      </div>
+      <textarea
+        id={props.id}
+        className={props.invalid ? css.inputInvalid : css.textarea}
+        value={props.text}
+        disabled={props.disabled}
+        rows={2}
+        onChange={(event) => { props.onEdit(event.target.value) }}
+      />
+      <p className={props.invalid ? css.invalid : css.hint}>
+        {props.invalid ? props.invalidLabel : props.hint}
+      </p>
+    </div>
+  )
+}
+
 /**
  * A write-only credential control. The value never rides a response, so the
  * control reports only whether one is configured and starts blank; a blank

@@ -11,6 +11,7 @@ import type {
   AgentOptions,
   AgentStatus,
   CancelOptions,
+  LoopDetectionOptions,
   InboxTarget,
   PreStepDecision,
   RequestErrorAction,
@@ -21,6 +22,7 @@ import {
   BlockAssembler,
   LlmError,
   createAssistantMessage,
+  createUserMessage,
   deepFreeze,
   errorChain,
   markAgentLoopRequest,
@@ -34,6 +36,7 @@ import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
 import type { Context } from '@deepseek-ai/cordis'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
+import { detectTokenLoop, tokenizeLoopText } from './loop-detector.ts'
 
 type Phase =
   | { kind: 'idle'; lastTurn: number }
@@ -50,6 +53,36 @@ type StepEndReason = Extract<TurnEndReason, { kind: 'completed' | 'max-tokens' }
 type PreparedStep =
   | { kind: 'reject' }
   | { kind: 'enter'; messages: UserMessage[]; assembly: PromptAssembly }
+
+const DEFAULT_LOOP_FIRST_PROMPT = '<continue>'
+const DEFAULT_LOOP_SECOND_PROMPT = '<You are in a loop, please output the response now>'
+const DEFAULT_LOOP_THIRD_PROMPT = "<Please stop. Explain the user's current status; do not continue with your task>"
+
+interface ResolvedLoopDetectionOptions {
+  enabled: boolean
+  includeLoop: boolean
+  minTokens: number
+  firstPrompt: string
+  secondPrompt: string
+  thirdPrompt: string
+}
+
+function resolveLoopDetection(options: LoopDetectionOptions | undefined): ResolvedLoopDetectionOptions {
+  return {
+    enabled: options?.enabled ?? false,
+    includeLoop: options?.includeLoop ?? true,
+    minTokens: options?.minTokens ?? 5,
+    firstPrompt: options?.firstPrompt ?? DEFAULT_LOOP_FIRST_PROMPT,
+    secondPrompt: options?.secondPrompt ?? DEFAULT_LOOP_SECOND_PROMPT,
+    thirdPrompt: options?.thirdPrompt ?? DEFAULT_LOOP_THIRD_PROMPT,
+  }
+}
+
+function loopPrompt(options: ResolvedLoopDetectionOptions, count: number): string {
+  if (count === 1) return options.firstPrompt
+  if (count === 2) return options.secondPrompt
+  return options.thirdPrompt
+}
 
 /** Remove adapter-derived values before plugins propose the next request config. */
 function requestProposal(header: EpochHeader): LlmCallConfig {
@@ -76,6 +109,8 @@ export class ReactLoopAgent implements Agent {
   /** Whether this loop instance has appended its initial/resume request anchor. */
   private requestHeaderLogged = false
   private readonly runtimeContext: RuntimeContextProjection
+  private readonly loopDetection: ResolvedLoopDetectionOptions
+  private consecutiveLoopDetections = 0
 
   constructor(
     private loopCtx: Context,
@@ -94,6 +129,7 @@ export class ReactLoopAgent implements Agent {
     this.scope = createScope(loopCtx, this)
     this.ctx = this.scope.ctx.extend({ agent: this })
     this.runtimeContext = new RuntimeContextProjection(this.ctx, session)
+    this.loopDetection = resolveLoopDetection(options.loopDetection)
   }
 
   get status(): AgentStatus {
@@ -227,6 +263,7 @@ export class ReactLoopAgent implements Agent {
     if (this.phase.kind !== 'running') throw new Error(`agent "${this.id}": pre-step outside running phase`)
     const signal = this.phase.abort.signal
     const claimed = this.inbox.claim(target, position.turn)
+    if (claimed.some(message => message.source.kind === 'user')) this.consecutiveLoopDetections = 0
     const assembly = await this.loopCtx.systemPrompt.assemble(assembleContextFor(this, signal))
     signal.throwIfAborted()
     const sections = renderContextSections(assembly)
@@ -342,13 +379,48 @@ export class ReactLoopAgent implements Agent {
       )
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
+      const requestAbort = new AbortController()
+      const requestSignal = AbortSignal.any([signal, requestAbort.signal])
+      const streamRequest = this.loopDetection.enabled
+        ? markAgentLoopRequest(deepFreeze({ ...request, signal: requestSignal }))
+        : request
+      let detectedLoop: ReturnType<typeof detectTokenLoop>
       try {
-        const stream = preparedCall?.stream(request) ?? this.loopCtx.llm.stream(request)
+        const stream = preparedCall?.stream(streamRequest) ?? this.loopCtx.llm.stream(streamRequest)
         signal.throwIfAborted()
+        let responseText = ''
         for await (const chunk of stream) {
           signal.throwIfAborted()
           chunkSeqs.push(this.session.append('assistant/chunk', { turn, step, chunk }).seq)
           assembler.push(chunk)
+          if (this.loopDetection.enabled && chunk.type === 'text-delta') {
+            responseText += chunk.text
+            detectedLoop = detectTokenLoop(tokenizeLoopText(responseText), this.loopDetection.minTokens)
+            if (detectedLoop !== undefined) {
+              requestAbort.abort(new Error('LLM loop detected'))
+              break
+            }
+          }
+        }
+        requestAbort.abort()
+        if (detectedLoop !== undefined) {
+          this.consecutiveLoopDetections += 1
+          if (this.consecutiveLoopDetections >= 4) {
+            throw new LlmError('LLM in infinite loop.', 'LLM_LOOP')
+          }
+          if (this.loopDetection.includeLoop && assembler.blocks().length > 0) {
+            const message = createAssistantMessage({
+              content: assembler.blocks(),
+              source: { provider: request.provider, model: request.model },
+            })
+            this.session.append(
+              'assistant/message',
+              { turn, step, message },
+              { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
+            )
+          }
+          this.injectLoopPrompt(loopPrompt(this.loopDetection, this.consecutiveLoopDetections), this.consecutiveLoopDetections)
+          return null
         }
         signal.throwIfAborted()
       } catch (error: unknown) {
@@ -407,9 +479,13 @@ export class ReactLoopAgent implements Agent {
         },
         { surfaceOp: 'append', sourceEventSeqs: chunkSeqs },
       )
-      if (finish.kind === 'max-tokens') return { kind: 'max-tokens' }
+      if (finish.kind === 'max-tokens') {
+        this.consecutiveLoopDetections = 0
+        return { kind: 'max-tokens' }
+      }
 
       const toolCalls = message.content.filter(block => block.type === 'tool-call')
+      this.consecutiveLoopDetections = 0
       if (toolCalls.length === 0) return { kind: 'completed' }
       const { concluded } = await executeToolCalls(
         this.loopCtx, turn, step, toolCalls, signal,
@@ -417,6 +493,14 @@ export class ReactLoopAgent implements Agent {
       )
       return concluded ? { kind: 'completed' } : null
     }
+  }
+
+  /** Queue the next escalation prompt at the next step boundary. */
+  private injectLoopPrompt(prompt: string, count: number): void {
+    this.inject(createUserMessage({
+      content: [{ type: 'text', text: prompt }],
+      source: { kind: 'plugin', plugin: 'agent-loop', form: 'notice', summary: `LLM loop detected × ${count}` },
+    }))
   }
 
   /**

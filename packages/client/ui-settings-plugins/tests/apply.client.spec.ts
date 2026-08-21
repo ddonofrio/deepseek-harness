@@ -60,7 +60,10 @@ async function bench(served?: string[]) {
 function declareRoot(slots: SlotRegistry): () => void {
   return slots.register({
     name: 'root',
-    children: { 'settings.section': { kind: 'list', scope: 'root' } },
+    children: {
+      'settings.section': { kind: 'list', scope: 'root' },
+      'settings.general.item': { kind: 'list', scope: 'root' },
+    },
   } as never, () => null)
 }
 
@@ -84,6 +87,16 @@ describe('ui-settings-plugins apply', () => {
     expect(tab.options).toMatchObject({ id: 'configurable', order: 0 })
     expect(resolveSlotLabel(tab.options.label)).toBe('插件配置')
     expect(slots.spec('settings.plugin.item')).toMatchObject({ kind: 'keyed', scope: 'root' })
+  })
+
+  it('registers loop detection in General below the busy-enter behavior', async () => {
+    const { ctx, slots } = await bench()
+    declareRoot(slots)
+
+    await ctx.plugin({ inject: [...inject], apply }).await()
+
+    const row = slots.entries('settings.general.item').find(entry => entry.options.id === 'agent-loop-detection')
+    expect(row?.options).toMatchObject({ id: 'agent-loop-detection', order: 30 })
   })
 
 

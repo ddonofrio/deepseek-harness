@@ -1,7 +1,10 @@
 /** The agent-loop card's staged form over the `agent-loop` settings namespace. */
 
 import type { SettingsScope, SnapshotStore } from '@deepseek-ai/dsh-client-runtime/client'
-import { CardForm, numberField, type CardActions, type CardFieldState, type CardShell } from './card-form.ts'
+import {
+  booleanField, CardForm, numberField, textField,
+  type CardActions, type CardFieldState, type CardShell,
+} from './card-form.ts'
 
 /**
  * Namespace of the agent loop's user-owned settings. Spelled here rather than
@@ -16,6 +19,13 @@ export const AGENT_LOOP_NS = 'agent-loop'
 export interface AgentLoopSettings {
   /** Upper bound on parallel-safe tool calls in flight per step. */
   maxParallelToolCalls?: number
+  /** General loop-recovery policy. */
+  loopDetectionEnabled?: boolean
+  loopDetectionIncludeLoop?: boolean
+  loopDetectionMinTokens?: number
+  loopDetectionFirstPrompt?: string
+  loopDetectionSecondPrompt?: string
+  loopDetectionThirdPrompt?: string
 }
 
 /** What the agent-loop card renders. */
@@ -53,5 +63,60 @@ export class AgentLoopCardController {
    */
   inject(): AgentLoopCardFace {
     return { hooks: { agentLoopCard: this.store }, ...this.form.actions() }
+  }
+}
+
+/** General-settings projection for the loop recovery policy. */
+export interface LoopDetectionRowState extends CardShell {
+  enabled: CardFieldState
+  includeLoop: CardFieldState
+  minTokens: CardFieldState
+  firstPrompt: CardFieldState
+  secondPrompt: CardFieldState
+  thirdPrompt: CardFieldState
+}
+
+/** Registration-side face injected into the General settings row. */
+export interface LoopDetectionRowFace extends CardActions {
+  hooks: {
+    loopDetection: SnapshotStore<LoopDetectionRowState>
+  }
+}
+
+/** Bridges the loop policy fields onto the General settings row. */
+export class LoopDetectionRowController {
+  private readonly form: CardForm<AgentLoopSettings>
+  private readonly store: SnapshotStore<LoopDetectionRowState>
+
+  constructor(scope: SettingsScope<AgentLoopSettings>) {
+    this.form = new CardForm(scope, [
+      booleanField('loopDetectionEnabled'),
+      booleanField('loopDetectionIncludeLoop'),
+      numberField('loopDetectionMinTokens'),
+      textField('loopDetectionFirstPrompt'),
+      textField('loopDetectionSecondPrompt'),
+      textField('loopDetectionThirdPrompt'),
+    ])
+    this.store = this.form.bind(() => this.projection())
+  }
+
+  private projection(): LoopDetectionRowState {
+    return {
+      ...this.form.shell(),
+      enabled: this.form.field('loopDetectionEnabled'),
+      includeLoop: this.form.field('loopDetectionIncludeLoop'),
+      minTokens: this.form.field('loopDetectionMinTokens'),
+      firstPrompt: this.form.field('loopDetectionFirstPrompt'),
+      secondPrompt: this.form.field('loopDetectionSecondPrompt'),
+      thirdPrompt: this.form.field('loopDetectionThirdPrompt'),
+    }
+  }
+
+  /**
+   * Build the injected face consumed by the General settings row.
+   * @returns the row snapshot and staged-form actions.
+   */
+  inject(): LoopDetectionRowFace {
+    return { hooks: { loopDetection: this.store }, ...this.form.actions() }
   }
 }
