@@ -73,7 +73,12 @@ interface Message {
  */
 interface MessageSourceMap {
   user: { kind: 'user' }
-  plugin: { kind: 'plugin'; plugin: string } & ContextFormed
+  plugin: {
+    kind: 'plugin'
+    plugin: string
+    /** Model conversation role for producer-authored internal messages. */
+    modelRole?: 'assistant'
+  } & ContextFormed
   model: ModelMessageSource
   tool: ToolMessageSource
 }

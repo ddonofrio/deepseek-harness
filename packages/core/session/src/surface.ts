@@ -8,7 +8,7 @@
  * @module @deepseek-ai/dsh-session/surface
  */
 
-import type { Message } from '@deepseek-ai/dsh-llm'
+import { freezeMessage, type Message } from '@deepseek-ai/dsh-llm'
 import type { SessionEvent, SurfaceEvent, SurfaceEventType, SurfaceOp } from './types.ts'
 
 /** Runtime counterpart of the message-producing event union. */
@@ -17,6 +17,14 @@ const SURFACE_EVENT_TYPES = new Set<string>([
   'assistant/message',
   'tool/result',
 ])
+
+/** Project an internal recovery notice with the agent's conversation role. */
+function deriveUserMessage(event: Extract<SessionEvent, { type: 'user/message' }>): Message {
+  const message = event.data
+  return message.source.kind === 'plugin' && message.source.modelRole === 'assistant'
+    ? freezeMessage({ ...message, role: 'assistant' })
+    : message
+}
 
 /**
  * Whether an event type can join the model-visible surface.
@@ -85,8 +93,9 @@ export function deriveEventMessage(event: SessionEvent): Message | null {
   // history; turn/step boundaries, chunks, usage, and errors are trace/replay
   // data.
   switch (event.type) {
-    // Ordinary prompts and injected context project in user role: the event's
-    // model-facing content stays verbatim. Do NOT re-add per-type framing
+    // Ordinary prompts and injected context project in user role, while the
+    // loop and token-limit recovery notices project in assistant role: the
+    // event's model-facing content stays verbatim. Do NOT re-add per-type framing
     // (e.g. `<context>`) here: framing is caller-owned — a producer bakes it
     // into `content`, as agent-instructions does with `<system-reminder>` — or,
     // if reintroduced, must be driven by the event `meta` map and a dedicated
@@ -94,7 +103,7 @@ export function deriveEventMessage(event: SessionEvent): Message | null {
     // deferred design note in
     // ../../../../.agents/notes/implemented/simplification/2026-07-20-unwrap-injected-content-envelopes.md
     case 'user/message': {
-      return event.data
+      return deriveUserMessage(event)
     }
     case 'assistant/message': {
       // Skip an empty-content assistant/message: it exists only to host a

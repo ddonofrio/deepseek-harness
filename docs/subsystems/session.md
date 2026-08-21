@@ -46,11 +46,13 @@ interface SessionEventMap {
   /** Closes step `step` of turn `turn`. */
   'step/end': { turn: number; step: number }
   /**
-   * A user-role message on the model-visible surface: a direct human prompt
+   * A user-role message on the durable model-visible surface: a direct human prompt
    * (the queued message claimed for this turn), a synthetic `agent.inject()`
    * context (file-change notices, subdir AGENTS.md, skill content, cron
    * notifications, …), or an entered goal continuation round. All three
-   * project their `content` verbatim; `source` tells them apart.
+   * project their `content` verbatim; `source` tells them apart. The surface
+   * projection may present an internal recovery notice as an assistant
+   * message while retaining this user-role event for durable input ownership.
    */
   'user/message': UserMessage
   /** Raw stream chunk — token-level replay fidelity. */

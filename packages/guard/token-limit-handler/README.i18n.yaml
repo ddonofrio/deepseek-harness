@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/guard/token-limit-handler/README.md
-README.md: 52b11406b54e5d896b11524e0009e0264454e5bf
-README.zh.md: fd4edd4b1277cb0631852e869c79cb2863ad0fdb
+README.md: e6cae975ce0530543acf7af3e81df70cbce90df2
+README.zh.md: 624bb25e8b087684bdfac62b29ba5c9cf2833ab0

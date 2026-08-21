@@ -525,7 +525,10 @@ export class ReactLoopAgent implements Agent {
   private injectLoopPrompt(prompt: string, count: number): void {
     this.inject(createUserMessage({
       content: [{ type: 'text', text: prompt }],
-      source: { kind: 'plugin', plugin: 'agent-loop', form: 'notice', summary: `LLM loop detected × ${count}` },
+      source: {
+        kind: 'plugin', plugin: 'agent-loop', modelRole: 'assistant',
+        form: 'notice', summary: `LLM loop detected × ${count}`,
+      },
     }))
   }
 

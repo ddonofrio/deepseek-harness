@@ -160,7 +160,7 @@ describe('agent loop', () => {
 
     expect(adapter.requests).toHaveLength(2)
     expect(adapter.requests[1]?.messages.at(-1)).toMatchObject({
-      role: 'user',
+      role: 'assistant',
       content: [{ type: 'text', text: '<continue>' }],
     })
     expect(userTexts(agent)).toContain('<continue>')
@@ -196,6 +196,9 @@ describe('agent loop', () => {
       [{ type: 'text', text: '<You are in a loop, please output the response now>' }],
       [{ type: 'text', text: "<Please stop. Explain the user's current status; do not continue with your task>" }],
     ])
+    expect(adapter.requests.slice(1).map(request => request.messages.at(-1)?.role)).toEqual([
+      'assistant', 'assistant', 'assistant',
+    ])
   })
 
   it('compacts and replays the loop-causing request before resetting detection', async () => {
@@ -222,11 +225,11 @@ describe('agent loop', () => {
     expect(compaction.calls).toBe(1)
     expect(adapter.requests).toHaveLength(6)
     expect(adapter.requests[4]?.messages.at(-1)).toMatchObject({
-      role: 'user',
+      role: 'assistant',
       content: [{ type: 'text', text: "<Please stop. Explain the user's current status; do not continue with your task>" }],
     })
     expect(adapter.requests[5]?.messages.at(-1)).toMatchObject({
-      role: 'user',
+      role: 'assistant',
       content: [{ type: 'text', text: '<continue>' }],
     })
     expect(agent.session.events.filter(event => event.type === 'compaction/end')).toHaveLength(1)
@@ -321,7 +324,7 @@ describe('agent loop', () => {
 
     expect(adapter.requests).toHaveLength(2)
     expect(adapter.requests[1]?.messages.at(-1)).toMatchObject({
-      role: 'user',
+      role: 'assistant',
       content: [{ type: 'text', text: '<continue>' }],
     })
   })
@@ -351,7 +354,7 @@ describe('agent loop', () => {
     expect(adapter.requests).toHaveLength(2)
     expect(executions).toBe(0)
     expect(adapter.requests[1]?.messages.at(-1)).toMatchObject({
-      role: 'user',
+      role: 'assistant',
       content: [{ type: 'text', text: '<continue>' }],
     })
   })

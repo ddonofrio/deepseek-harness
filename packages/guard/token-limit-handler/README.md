@@ -15,7 +15,7 @@ The token-limit handler responds at the `agent/turn-stopping` extension point wh
     customPrompt: ''       # required when action is custom-prompt
 ```
 
-The same fields are available in the `token-limit-handler` settings namespace and are applied live. An empty `customPrompt` is rejected when `action` is `custom-prompt`. Each recovery prompt is logged as a plugin-sourced `user/message`, so the next model request can reconstruct it from the session log.
+The same fields are available in the `token-limit-handler` settings namespace and are applied live. An empty `customPrompt` is rejected when `action` is `custom-prompt`. Each recovery prompt is logged as a plugin-sourced `user/message`, then projected to the model as an `assistant` message so the model treats it as agent continuation rather than a new human request.
 
 ## Model Experience
 

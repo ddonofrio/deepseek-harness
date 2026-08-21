@@ -15,7 +15,7 @@ Token limit handler 在 `agent/turn-stopping` 扩展点处理以 `max-tokens` �
     customPrompt: ''       # required when action is custom-prompt
 ```
 
-同样的字段通过 `token-limit-handler` 设置命名空间提供，并且实时生效。当 `action` 为 `custom-prompt` 时，空的 `customPrompt` 会被拒绝。每条恢复提示都会记录为插件来源的 `user/message`，因此下一次模型请求可以从会话日志重建它。
+同样的字段通过 `token-limit-handler` 设置命名空间提供，并且实时生效。当 `action` 为 `custom-prompt` 时，空的 `customPrompt` 会被拒绝。每条恢复提示都会记录为插件来源的 `user/message`，随后在模型投影中作为 `assistant` 消息发送，使模型将其理解为 agent 的继续指令，而不是新的人工请求。
 
 ## 模型体验
 

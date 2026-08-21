@@ -51,6 +51,9 @@ describe('token-limit-handler', () => {
     await waitForIdle(ctx, agent)
 
     expect(recoveryMessages(agent)).toEqual(['continue', 'continue', 'continue', 'continue', 'continue'])
+    expect(adapter.requests.slice(1).map(request => request.messages.at(-1)?.role)).toEqual([
+      'assistant', 'assistant', 'assistant', 'assistant', 'assistant',
+    ])
     expect(agent.session.events.filter(event => event.type === 'turn/end').at(-1)?.data).toMatchObject({
       reason: { kind: 'max-tokens' },
     })
@@ -87,6 +90,9 @@ describe('token-limit-handler', () => {
     await waitForIdle(ctx, agent)
 
     expect(recoveryMessages(agent)).toEqual(['finish the answer in fewer words', 'finish the answer in fewer words'])
+    expect(adapter.requests.map(request => request.messages.at(-1)?.role)).toEqual([
+      'user', 'assistant', 'user', 'assistant',
+    ])
     expect(adapter.requests).toHaveLength(4)
   })
 

@@ -100,6 +100,22 @@ describe('Session', () => {
     expect(steeringMessage!.content).toEqual([{ type: 'text', text: 'focus on tests' }])
   })
 
+  it('projects agent recovery notices as assistant messages', () => {
+    const session = Session.create(SessionId('recovery-roles'))
+    for (const [plugin, text] of [
+      ['agent-loop', '<continue>'],
+      ['token-limit-handler', 'continue'],
+    ] as const) {
+      session.append('user/message', createUserMessage({
+        content: [{ type: 'text', text }],
+        source: { kind: 'plugin', plugin, modelRole: 'assistant', form: 'notice', summary: text },
+      }), { surfaceOp: 'append' })
+    }
+
+    expect(session.deriveMessages().map(message => message.role)).toEqual(['assistant', 'assistant'])
+    expect(session.events.every(event => event.type !== 'user/message' || event.data.role === 'user')).toBe(true)
+  })
+
   it('keeps the exact identified context message in durable history and projection', () => {
     const session = Session.create(SessionId('s2-raw'))
     const message = createUserMessage({
