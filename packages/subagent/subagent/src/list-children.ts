@@ -139,7 +139,8 @@ export async function listChildren(
   const listing = await prepareListing(ctx, signal)
   const candidates = [...listing.corpus.values()]
     .filter(record => record.header.parentSession === parentSessionId
-      && record.header.origin === 'subagent')
+      && record.header.origin === 'subagent'
+      && record.header.ephemeral !== true)
     .sort(compareCorpusRecords)
   const rows = await resolveCandidateRows(candidates, listing, signal)
   return rows.filter((row): row is SubagentListEntry => row !== undefined)

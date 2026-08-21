@@ -26,17 +26,15 @@ The reviewer returns a structured value with exactly these fields:
 
 Before each review, the parent receives a visible `Double-checking results before stopping…` notice. `complete` with an empty message allows the current turn to close. `incomplete` requires a non-empty actionable `message`; the checker sends that text to the parent as a plugin-sourced user message and steers one more model step. A review failure or invalid result leaves the original answer in place and logs a warning.
 
-The reviewer's child is one-shot and is disposed after its result settles. The checker does not recursively review the reviewer or a child it has spawned. The reviewer inherits the parent's available tools and is instructed to use them for verification when needed.
+The reviewer's child is one-shot, ephemeral, and disposed after its result settles. It is not persisted or exposed through the host session lists. The checker does not recursively review the reviewer or a child it has spawned. The reviewer inherits the parent's available tools and is instructed to use them for verification when needed.
 
 ## Model Experience
-
-The current-turn event summary is bounded and large message or tool-result blocks are truncated before they reach the reviewer prompt. Turns containing the agent-loop's loop-recovery notice are skipped so loop recovery and completion review do not run together.
 
 ### Completion review
 
 #### What the model sees
 
-The reviewer receives the inherited conversation plus a JSON event log for the current turn, and must return the structured result `{status, message}`. The review prompt asks it to inspect the request, completed work, tool results, and final answer, using its inherited tools when verification requires them. The parent transcript shows a `Double-checking results before stopping…` notice while this request runs.
+The current-turn event summary is bounded and large message or tool-result blocks are truncated before they reach the reviewer prompt. Only turns containing the agent-loop's automatic compaction notice are skipped, so completion review does not compete with context maintenance. The third loop-retry prompt is reviewed after the model answers it. The reviewer receives the inherited conversation plus a JSON event log for the current turn, and must return the structured result `{status, message}`. The review prompt asks it to inspect the request, completed work, tool results, and final answer, using its inherited tools when verification requires them. The parent transcript shows a `Double-checking results before stopping…` notice while this request runs.
 
 #### Token effect
 

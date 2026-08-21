@@ -86,6 +86,8 @@ interface SessionHeader {
    * would replay history the model can no longer act on.
    */
   readonly agentPreset?: string
+  /** Internal live-only session that must not create a persistence artifact. */
+  readonly ephemeral?: boolean
 }
 ```
 
@@ -118,6 +120,7 @@ interface CreateSessionOptions {
     readonly origin?: 'subagent'
     readonly delegationDepth?: number
     readonly agentPreset?: string
+    readonly ephemeral?: boolean
   }
 }
 ```

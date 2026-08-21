@@ -12,7 +12,7 @@ An agent can stop after producing a plausible answer while leaving a requested v
 
 `@deepseek-ai/dsh-completion-checker` listens to `agent/turn-stopping` for normal completed turns and starts a one-shot `fork` subagent with structured output. The fork inherits the closed conversation prefix and receives the current turn's event log in its review prompt, because the current turn has not yet appended `turn/end` at the checkpoint.
 
-The review protocol is `{ status: 'complete' | 'incomplete'; message: string }`. The plugin first records a visible `Double-checking results before stopping…` plugin notice so the parent UI shows the review interval. An incomplete result must contain an actionable message; the plugin records that message as a plugin-sourced `user/message` and calls `agent.steer()` before the turn closes. Complete, invalid, failed, aborted, and non-completed reviews leave the original terminal decision unchanged. The reviewer run is disposed after settlement, and an active-agent set prevents recursive reviews.
+The review protocol is `{ status: 'complete' | 'incomplete'; message: string }`. The plugin first records a visible `Double-checking results before stopping…` plugin notice so the parent UI shows the review interval. An incomplete result must contain an actionable message; the plugin records that message as a plugin-sourced `user/message` and calls `agent.steer()` before the turn closes. Complete, invalid, failed, aborted, and non-completed reviews leave the original terminal decision unchanged. The reviewer run is disposed after settlement, its local child is marked ephemeral so it is neither persisted nor exposed through session listings, and an active-agent set prevents recursive reviews.
 
 The `completion-checker` settings namespace exposes `enabled`, defaults it to `true`, and applies it live. The provider name remains composition configuration and defaults to `fork`, which is mounted by the base bundle.
 
@@ -30,4 +30,4 @@ The user may see one additional agent step when the reviewer finds missing work,
 
 The reviewer inherits the parent's tools and may use them to verify claims. Recursive checking is suppressed by tracking the parent and reviewer agent identities in memory; this state is intentionally not durable because it coordinates one live terminal checkpoint only.
 
-The current-turn supplement is a bounded event summary rather than a lossless log, so large tool results cannot exhaust the reviewer's context. Turns carrying an agent-loop recovery notice are excluded from completion review; automatic loop compaction records its own visible notice before maintenance starts.
+The current-turn supplement is a bounded event summary rather than a lossless log, so large tool results cannot exhaust the reviewer's context. Only the agent-loop's automatic compaction notice is excluded from completion review; the third loop-retry prompt is reviewed after the model answers it.

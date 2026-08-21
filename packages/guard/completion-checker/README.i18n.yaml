@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write packages/guard/completion-checker/README.md
-README.md: a36274c9a0b888c3f25c4e7ea255bd201e083593
+README.md: 7a69fb1addd89771339b127544541186d87587d5
 README.zh.md: 42dd55aa6d31ed5bfd5b329754dad47d04404562

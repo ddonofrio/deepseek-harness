@@ -150,6 +150,8 @@ flowchart LR
   cfg --> plugin_dsh_base_repeat_tool_reminder
   plugin_dsh_base_token_limit_handler["token-limit-handler<br/>@deepseek-ai/dsh-token-limit-handler"]
   cfg --> plugin_dsh_base_token_limit_handler
+  plugin_dsh_base_completion_checker["completion-checker<br/>@deepseek-ai/dsh-completion-checker"]
+  cfg --> plugin_dsh_base_completion_checker
   plugin_dsh_base_web["web<br/>@deepseek-ai/dsh-web"]
   cfg --> plugin_dsh_base_web
   plugin_dsh_base_web_search_deepseek["web-search-deepseek<br/>@deepseek-ai/dsh-web-search-deepseek"]
@@ -241,6 +243,7 @@ flowchart LR
 | `tool-str-replace-editor` | `@deepseek-ai/dsh-tool-str-replace-editor` |
 | `repeat-tool-reminder` | `@deepseek-ai/dsh-repeat-tool-reminder` |
 | `token-limit-handler` | `@deepseek-ai/dsh-token-limit-handler` |
+| `completion-checker` | `@deepseek-ai/dsh-completion-checker` |
 | `web` | `@deepseek-ai/dsh-web` |
 | `web-search-deepseek` | `@deepseek-ai/dsh-web-search-deepseek` |
 | `tool-web` | `@deepseek-ai/dsh-tool-web` |

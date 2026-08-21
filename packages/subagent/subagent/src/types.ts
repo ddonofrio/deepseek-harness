@@ -88,6 +88,8 @@ export interface SubagentCapabilities {
   readonly depthLimit: boolean
   readonly toolFilter: boolean
   readonly persona: boolean
+  /** Whether the provider can keep a one-shot child out of session persistence. */
+  readonly ephemeral?: boolean
 }
 
 /**
@@ -146,6 +148,8 @@ export interface SubagentStartRequest {
    * persona (strict `{{…}}` interpolation against the registered variables).
    */
   readonly persona?: string
+  /** Keep an internal one-shot child in memory only; requires provider support. */
+  readonly ephemeral?: boolean
 }
 
 /**

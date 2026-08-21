@@ -39,7 +39,7 @@ export const Config: z<Config> = z.object({
  * creation window).
  */
 class SpawnInProcessProvider implements SubagentProvider {
-  readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
+  readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true, ephemeral: true }
   // Context contract: a spawned child starts fresh — it never sees the parent conversation.
   readonly inheritsParentContext = false
 
@@ -49,7 +49,7 @@ class SpawnInProcessProvider implements SubagentProvider {
     // Fresh child: no seed. The shared driver mints ids, stamps cwd/lineage/
     // depth, drives the one-shot (including the structured capture when the
     // request carries an outputSchema), and maps the result.
-    return startInProcessRun(request, {})
+    return startInProcessRun(request, { ...request.ephemeral === true ? { ephemeral: true } : {} })
   }
 
   prepareContinuable(): Promise<ContinuableCreateSpec> {

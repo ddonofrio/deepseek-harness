@@ -20,6 +20,7 @@ interface ReviewHarness {
 
 interface HarnessOptions {
   readonly loopRecoveryNotice?: boolean
+  readonly loopRetryNotice?: boolean
   readonly largeCurrentTurnMessage?: boolean
 }
 
@@ -61,16 +62,30 @@ async function harness(
     },
   } as never)
   await ctx.plugin(AgentLoop, { agents: [] })
-  if (options.loopRecoveryNotice || options.largeCurrentTurnMessage) {
+  if (options.loopRecoveryNotice || options.loopRetryNotice || options.largeCurrentTurnMessage) {
     ctx.on('agent/turn-stopping', ({ agent: subject }) => {
-      const text = options.largeCurrentTurnMessage ? 'x'.repeat(200000) : 'LLM loop detected × 3'
+      const recovery = options.loopRecoveryNotice
+      const retry = options.loopRetryNotice
+      const text = options.largeCurrentTurnMessage
+        ? 'x'.repeat(200000)
+        : recovery
+          ? 'Repeated model output detected. Compacting context before retrying…'
+          : retry
+            ? 'Please stop. Explain the current status and what is missing.'
+            : 'Repeated model output detected. Compacting context before retrying…'
       subject.session.append('user/message', createUserMessage({
         content: [{ type: 'text', text }],
         source: {
           kind: 'plugin',
           plugin: 'agent-loop',
           form: 'notice',
-          summary: options.largeCurrentTurnMessage ? 'large test notice' : 'LLM loop detected × 3',
+          summary: options.largeCurrentTurnMessage
+            ? 'large test notice'
+            : recovery
+              ? 'compacting after repeated loop'
+              : retry
+                ? 'LLM loop detected × 3'
+                : 'compacting after repeated loop',
         },
       }), { surfaceOp: 'append' })
     })
@@ -107,6 +122,7 @@ describe('completion-checker', () => {
     await waitForIdle(ctx, agent)
 
     expect(starts).toHaveLength(1)
+    expect(starts[0]?.ephemeral).toBe(true)
     expect(starts[0]!.prompt[0]).toMatchObject({ type: 'text' })
     expect((starts[0]!.prompt[0] as { type: 'text'; text: string }).text).toContain('answer')
     expect(starts[0]!.outputSchema).toMatchObject({
@@ -162,6 +178,14 @@ describe('completion-checker', () => {
     await waitForIdle(ctx, agent)
 
     expect(starts).toHaveLength(0)
+  })
+
+  it('reviews the third loop-retry prompt after the model stops', async () => {
+    const { ctx, agent, starts } = await harness([{ status: 'complete', message: '' }], {}, { loopRetryNotice: true })
+    start(agent)
+    await waitForIdle(ctx, agent)
+
+    expect(starts).toHaveLength(1)
   })
 
   it('bounds the current-turn review context', async () => {
@@ -225,6 +249,8 @@ describe('completion-checker', () => {
     await waitForIdle(ctx, agent)
 
     expect(adapter.requests).toHaveLength(2)
+    expect(ctx.agents.list()).toEqual([agent])
+    expect(ctx.sessions.list()).toEqual([agent.session])
     expect(agent.session.events.filter(event =>
       event.type === 'user/message' && event.data.source.kind === 'plugin')).toMatchObject([
       { data: { source: { plugin: 'completion-checker' } } },

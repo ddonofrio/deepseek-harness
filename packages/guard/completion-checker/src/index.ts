@@ -163,7 +163,7 @@ function isLoopRecoveryTurn(events: readonly SessionEvent[]): boolean {
     && event.data.source.kind === 'plugin'
     && event.data.source.plugin === 'agent-loop'
     && event.data.source.form === 'notice'
-    && event.data.source.summary.startsWith('LLM loop detected'))
+    && event.data.source.summary === 'compacting after repeated loop')
 }
 
 /** Prompt the reviewer to validate the user's request and the current turn. */
@@ -250,6 +250,7 @@ export function apply(ctx: Context, config: Config): void {
         parent: agent,
         signal,
         outputSchema: COMPLETION_REVIEW_SCHEMA,
+        ephemeral: true,
       })
       if (run.localAgent !== undefined) checkerAgents.add(run.localAgent)
       const review = readReview(await run.result)

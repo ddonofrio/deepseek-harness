@@ -59,7 +59,7 @@ function completedTurnPrefix(parent: Agent): SessionEvent[] {
  * restrict() and a scoped shadowing persona section).
  */
 class ForkInProcessProvider implements SubagentProvider {
-  readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true }
+  readonly capabilities: SubagentCapabilities = { outputSchema: true, depthLimit: true, toolFilter: true, persona: true, ephemeral: true }
   // Context contract: a forked child IS seeded with the parent's completed-turn prefix.
   readonly inheritsParentContext = true
 
@@ -71,6 +71,7 @@ class ForkInProcessProvider implements SubagentProvider {
       // Only pass a seed when there's a completed turn to inherit; an empty seed
       // is equivalent to a fresh child, so omit it to keep the session unseeded.
       ...seed.length > 0 ? { seed } : {},
+      ...request.ephemeral === true ? { ephemeral: true } : {},
     })
   }
 
