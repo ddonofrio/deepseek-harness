@@ -333,12 +333,10 @@ export class PiAiAdapter extends LlmAdapter {
     // the one it started with and the next call picks up the new one.
     const profile = this.profileOf(snapshot, options.provider)
     const model = this.modelOf(snapshot, options.provider, options.model)
-    const reasoning = options.purpose === 'compaction'
-      ? resolveReasoningLevel(model, 'off')
-      : resolveReasoningLevel(
-        model,
-        options.reasoningEffort ?? profile.reasoning,
-      )
+    const reasoning = resolveReasoningLevel(
+      model,
+      options.reasoningEffort ?? profile.reasoning,
+    )
     const apiKey = await this.config.resolveApiKey(options.provider, profile)
 
     const consumer = new AbortController()
