@@ -147,6 +147,7 @@ const DEFAULT_LOOP_DETECTION: Required<LoopDetectionOptions> = {
   firstPrompt: '<continue>',
   secondPrompt: '<You are in a loop, please output the response now>',
   thirdPrompt: "<Please stop. Explain the user's current status; do not continue with your task>",
+  compactBeforeFailing: false,
 }
 
 /** Project the flat General setting fields into one agent option. */
@@ -158,6 +159,7 @@ function loopDetectionFromSettings(settings: AgentLoopSettings): Required<LoopDe
     firstPrompt: settings.loopDetectionFirstPrompt,
     secondPrompt: settings.loopDetectionSecondPrompt,
     thirdPrompt: settings.loopDetectionThirdPrompt,
+    compactBeforeFailing: settings.loopDetectionCompactBeforeFailing,
   }
 }
 
@@ -170,6 +172,7 @@ function resolveAgentOptions(options: AgentOptions, settings: AgentLoopSettings)
     && configured.firstPrompt === DEFAULT_LOOP_DETECTION.firstPrompt
     && configured.secondPrompt === DEFAULT_LOOP_DETECTION.secondPrompt
     && configured.thirdPrompt === DEFAULT_LOOP_DETECTION.thirdPrompt
+    && configured.compactBeforeFailing === DEFAULT_LOOP_DETECTION.compactBeforeFailing
   if (options.loopDetection === undefined && usesDefaultPolicy) return options
   return {
     ...options,
@@ -311,6 +314,8 @@ export interface AgentLoopSettings {
   loopDetectionSecondPrompt: string
   /** Prompt injected after the third detected loop. */
   loopDetectionThirdPrompt: string
+  /** Whether to compact retained context before the loop becomes terminal. */
+  loopDetectionCompactBeforeFailing: boolean
 }
 
 /** Schema of the agent-loop settings section. */
@@ -322,6 +327,7 @@ export const AGENT_LOOP_SETTINGS_SCHEMA: z<AgentLoopSettings> = z.object({
   loopDetectionFirstPrompt: z.string().default(DEFAULT_LOOP_DETECTION.firstPrompt),
   loopDetectionSecondPrompt: z.string().default(DEFAULT_LOOP_DETECTION.secondPrompt),
   loopDetectionThirdPrompt: z.string().default(DEFAULT_LOOP_DETECTION.thirdPrompt),
+  loopDetectionCompactBeforeFailing: z.boolean().default(DEFAULT_LOOP_DETECTION.compactBeforeFailing),
 })
 
 /** Agent-loop plugin configuration. */
@@ -385,6 +391,7 @@ export class AgentLoop extends Service implements AgentFactory {
         firstPrompt: z.string().default('<continue>'),
         secondPrompt: z.string().default('<You are in a loop, please output the response now>'),
         thirdPrompt: z.string().default("<Please stop. Explain the user's current status; do not continue with your task>"),
+        compactBeforeFailing: z.boolean().default(false),
       }),
       cwd: z.string(),
       resumeSessionId: z.string(),
@@ -409,6 +416,7 @@ export class AgentLoop extends Service implements AgentFactory {
       loopDetectionFirstPrompt: DEFAULT_LOOP_DETECTION.firstPrompt,
       loopDetectionSecondPrompt: DEFAULT_LOOP_DETECTION.secondPrompt,
       loopDetectionThirdPrompt: DEFAULT_LOOP_DETECTION.thirdPrompt,
+      loopDetectionCompactBeforeFailing: DEFAULT_LOOP_DETECTION.compactBeforeFailing,
     }
     this.settingsEntry = entry
     let source: () => AgentLoopSettings = () => entry

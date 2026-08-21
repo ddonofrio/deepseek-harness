@@ -52,12 +52,17 @@ interface Config {
       firstPrompt?: string     // default <continue>
       secondPrompt?: string    // default escalation prompt
       thirdPrompt?: string     // default stop-and-report prompt
+      compactBeforeFailing?: boolean // default false; compact before the fourth detection fails
     }
   }>
 }
 ```
 
 Configured agents start automatically. A model call requires both `provider` and `model`; `agent/request` may supply a missing pair before dispatch. An optional positive `maxTokens` seeds each conversation request's output cap and is logged in its request header. `loopDetection` watches token-like word/punctuation units from text, reasoning, and tool-call content in each response; when the same suffix appears three times, the loop stops at once, optionally records the partial assistant response, and queues the configured intervention prompt for the next step. Adapters that emit complete blocks without deltas are covered through `block-end`, without counting a block twice. The first, second, and third consecutive detections use their corresponding prompts; a fourth raises `LLM_LOOP` with `LLM in infinite loop.`. A normally completed response resets the consecutive counter. The default prompts are `<continue>`, `<You are in a loop, please output the response now>`, and `<Please stop. Explain the user's current status; do not continue with your task>`. The General settings surface exposes the same policy as `agent-loop` fields (`loopDetectionEnabled`, `loopDetectionIncludeLoop`, `loopDetectionMinTokens`, and the three prompt fields); those values apply to new agents unless an explicit `AgentOptions.loopDetection` field overrides them. `maxParallelToolCalls` bounds every agent's rolling pool for parallel-safe calls and defaults to `10`. `agents` is deliberately absent from the Settings section — it is consumed once when the service starts, so a stored change could only look like it had an effect. `cwd` applies only to fresh sessions, while `resumeSessionId` retains persisted metadata. Configured agents use the deployment persona, and programmatic setup can shadow it per agent. This plugin supplies the per-agent `provider`, `model`, and `cwd` prompt variables; harness identity and deployment persona belong to `dsh-system-prompt`.
+
+With `compactBeforeFailing`, the fourth detection asks an installed `ctx.compaction` provider for a forced `loop-detection` compaction and replays the same step. A successful replacement resets the consecutive counter; an absent or ineffective compaction remains terminal.
+
+The General settings surface exposes the same policy through `loopDetectionCompactBeforeFailing` in addition to the existing loop-detection fields.
 
 ### Internal concrete driver
 

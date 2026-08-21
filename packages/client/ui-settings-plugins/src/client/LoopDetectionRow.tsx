@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import type { InjectFace, PropsLocale, PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
 import { IconChevronDownOutline14 } from '@deepseek-ai/dsh-client-ui-primitives'
-import { SelectField, TextAreaField, ValueField } from './fields.tsx'
+import { CheckboxField, SelectField, TextAreaField, ValueField } from './fields.tsx'
 import type { LoopDetectionRowFace } from './agent-loop-card-controller.ts'
 import type { PluginsSettingsLocaleKey } from './locales.ts'
 import css from './LoopDetectionRow.module.css'
@@ -116,6 +116,15 @@ export function LoopDetectionRow(props: LoopDetectionRowProps) {
                 </>
               )
               : null}
+            <CheckboxField
+              id="general-loop-detection-compact-before-failing"
+              label={field('loopDetectionCompactBeforeFailing')}
+              hint={field('loopDetectionCompactBeforeFailingHint')}
+              {...common}
+              {...state.compactBeforeFailing}
+              onEdit={(text) => { props.edit('loopDetectionCompactBeforeFailing', text) }}
+              onReset={() => { props.resetField('loopDetectionCompactBeforeFailing') }}
+            />
             <div className={css.footer}>
               {state.failed ? <p className={css.failed}>{t('saveFailed')}</p> : null}
               <button type="button" className={css.discard} disabled={!state.dirty || state.saving} onClick={props.discard}>

@@ -26,6 +26,7 @@ export interface AgentLoopSettings {
   loopDetectionFirstPrompt?: string
   loopDetectionSecondPrompt?: string
   loopDetectionThirdPrompt?: string
+  loopDetectionCompactBeforeFailing?: boolean
 }
 
 /** What the agent-loop card renders. */
@@ -74,6 +75,7 @@ export interface LoopDetectionRowState extends CardShell {
   firstPrompt: CardFieldState
   secondPrompt: CardFieldState
   thirdPrompt: CardFieldState
+  compactBeforeFailing: CardFieldState
 }
 
 /** Registration-side face injected into the General settings row. */
@@ -96,6 +98,7 @@ export class LoopDetectionRowController {
       textField('loopDetectionFirstPrompt'),
       textField('loopDetectionSecondPrompt'),
       textField('loopDetectionThirdPrompt'),
+      booleanField('loopDetectionCompactBeforeFailing'),
     ])
     this.store = this.form.bind(() => this.projection())
   }
@@ -109,6 +112,7 @@ export class LoopDetectionRowController {
       firstPrompt: this.form.field('loopDetectionFirstPrompt'),
       secondPrompt: this.form.field('loopDetectionSecondPrompt'),
       thirdPrompt: this.form.field('loopDetectionThirdPrompt'),
+      compactBeforeFailing: this.form.field('loopDetectionCompactBeforeFailing'),
     }
   }
 

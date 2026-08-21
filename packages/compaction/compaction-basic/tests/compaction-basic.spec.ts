@@ -278,7 +278,7 @@ function service(
 async function compactIfNeeded(
   compact: BasicCompactionEngine,
   session: Session,
-  trigger: 'pressure' | 'context-overflow' = 'pressure',
+  trigger: 'pressure' | 'context-overflow' | 'loop-detection' = 'pressure',
   model: string | undefined = MODEL,
 ): Promise<CompactionResult | null> {
   return compact.compactIfNeeded(agent(session, model), trigger, SIGNAL)
@@ -562,6 +562,13 @@ describe('pressure measurement and retention', () => {
     await expect(compactIfNeeded(compact, session, 'pressure'))
       .rejects.toThrow(/no context capacity for unknown-context\/model/)
     await expect(compactIfNeeded(compact, session, 'context-overflow'))
+      .resolves.not.toBeNull()
+    const loopSession = conversation(4)
+    loopSession.append('request/header', {
+      header: { config: { provider: 'unknown-context', model: 'model' } },
+      reason: 'resume',
+    })
+    await expect(compactIfNeeded(compact, loopSession, 'loop-detection'))
       .resolves.not.toBeNull()
   })
 

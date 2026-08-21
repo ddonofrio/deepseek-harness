@@ -36,6 +36,9 @@
       "path": "../../core/agent"
     },
     {
+      "path": "../../compaction/compaction"
+    },
+    {
       "path": "../../core/scope"
     },
     {

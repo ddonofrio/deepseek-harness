@@ -267,6 +267,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     let measurement = meter.measure(agent.session)
     switch (trigger) {
       case 'context-overflow':
+      case 'loop-detection':
         break
       case 'pressure':
         break
@@ -280,7 +281,7 @@ export class BasicCompactionEngine extends CompactionEngine {
     // capacity and checks its target-specific threshold.
     const prune = this.ctx.get('toolResultPruner')
 
-    if (trigger === 'context-overflow') {
+    if (trigger === 'context-overflow' || trigger === 'loop-detection') {
       if (prune !== undefined) {
         prune.pruneSession(agent.session)
         measurement = meter.measure(agent.session)

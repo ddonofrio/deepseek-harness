@@ -15,11 +15,14 @@ import { BashCard } from '../src/client/BashCard.tsx'
 import type { BashCardProps } from '../src/client/BashCard.tsx'
 import { ConfigurablePluginsTab } from '../src/client/ConfigurablePluginsTab.tsx'
 import type { ConfigurablePluginsTabProps } from '../src/client/ConfigurablePluginsTab.tsx'
+import { LoopDetectionRow } from '../src/client/LoopDetectionRow.tsx'
+import type { LoopDetectionRowProps } from '../src/client/LoopDetectionRow.tsx'
 import { PluginsSettingsSection } from '../src/client/PluginsSettingsSection.tsx'
 import type { PluginsSettingsSectionProps, PluginsSettingsTabEntry } from '../src/client/PluginsSettingsSection.tsx'
 import { WebSearchCard } from '../src/client/WebSearchCard.tsx'
 import type { WebSearchCardProps } from '../src/client/WebSearchCard.tsx'
 import type { AgentLoopCardState } from '../src/client/agent-loop-card-controller.ts'
+import type { LoopDetectionRowState } from '../src/client/agent-loop-card-controller.ts'
 import type { BashCardState } from '../src/client/bash-card-controller.ts'
 import type { CardFieldState, CardShell } from '../src/client/card-form.ts'
 import type { ConfigurablePluginsTabState } from '../src/client/tab-store.ts'
@@ -88,6 +91,24 @@ function renderBash(state: Partial<BashCardState> = {}) {
   const actions = cardActions()
   const props = { ...actions, t, useBashCard: bindSnapshotSelector(store) } as unknown as BashCardProps
   render(<BashCard {...props} />)
+  return actions
+}
+
+function renderLoopDetection(state: Partial<LoopDetectionRowState> = {}) {
+  const store = createSnapshotStore<LoopDetectionRowState>({
+    ...settled,
+    enabled: field('on'),
+    includeLoop: field('on'),
+    minTokens: field('5'),
+    firstPrompt: field('first'),
+    secondPrompt: field('second'),
+    thirdPrompt: field('third'),
+    compactBeforeFailing: field('off'),
+    ...state,
+  })
+  const actions = cardActions()
+  const props = { ...actions, t, useLoopDetection: bindSnapshotSelector(store) } as unknown as LoopDetectionRowProps
+  render(<LoopDetectionRow {...props} />)
   return actions
 }
 
@@ -346,6 +367,22 @@ describe('AgentLoopCard', () => {
     fireEvent.click(screen.getByRole('button', { name: en.reset }))
 
     expect(actions.resetField).toHaveBeenCalledWith('maxParallelToolCalls')
+  })
+})
+
+describe('LoopDetectionRow', () => {
+  it('shows the compact-before-failing checkbox even before detection is enabled', () => {
+    const actions = renderLoopDetection({ enabled: field('off') })
+    fireEvent.click(screen.getByText(en.loopDetectionTitle))
+
+    const checkbox = screen.getByRole('checkbox', { name: en.loopDetectionCompactBeforeFailing })
+    expect(checkbox).toBeTruthy()
+    expect(checkbox.compareDocumentPosition(screen.getByRole('button', { name: en.save }))
+      & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+
+    fireEvent.click(checkbox)
+
+    expect(actions.edit).toHaveBeenCalledWith('loopDetectionCompactBeforeFailing', 'on')
   })
 })
 

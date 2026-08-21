@@ -26,6 +26,32 @@
   color: var(--dsw-alias-label-primary);
 }
 
+.checkboxLabel {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--dsw-alias-label-primary);
+  cursor: pointer;
+}
+
+.checkbox {
+  width: 16px;
+  height: 16px;
+  flex: none;
+  margin: 0;
+  accent-color: var(--dsw-alias-brand-primary);
+}
+
+.checkbox:disabled,
+.checkboxLabel:has(.checkbox:disabled) {
+  cursor: default;
+}
+
 .badges {
   display: inline-flex;
   align-items: center;

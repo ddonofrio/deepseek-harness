@@ -166,5 +166,8 @@ describe('CompactionEngine seam', () => {
 
     await svc.compactIfNeeded(stubAgent(session), 'context-overflow', controller.signal)
     expect(svc.lastSignal).toBe(controller.signal)
+
+    await svc.compactIfNeeded(stubAgent(session), 'loop-detection', controller.signal)
+    expect(svc.lastSignal).toBe(controller.signal)
   })
 })

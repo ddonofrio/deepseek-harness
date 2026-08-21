@@ -34,6 +34,8 @@ export interface LoopDetectionOptions {
   secondPrompt?: string
   /** Prompt sent after the third consecutive detection. */
   thirdPrompt?: string
+  /** Compact the retained context before failing after the third retry. Defaults to `false`. */
+  compactBeforeFailing?: boolean
 }
 
 /** Merge-extensible agent creation options. Persona belongs to system-prompt sections. */

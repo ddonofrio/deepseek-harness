@@ -599,8 +599,8 @@ export const SERVICE_API: readonly ServiceApiEntry[] = [
     methods: [
       {
         signature: 'abstract compactIfNeeded( agent: CompactionAgentContext, trigger: CompactionTrigger, signal: AbortSignal, ): Promise<CompactionResult | null>',
-        description: 'Consider automatic compaction for one explicit trigger. Pressure policy uses the latest durable routed request, while context-overflow policy may force a useful balanced reduction even below the normal threshold. Return `null` when no safe range can be compacted. A single oversized retained unit or request envelope cannot be repaired through surface compaction.',
-        parameters: [{ name: 'agent', description: 'agent context owning the session surface and routing options.' }, { name: 'trigger', description: 'normal pressure or provider-confirmed context overflow.' }, { name: 'signal', description: 'cancellation signal; model-backed implementations must forward it.' }],
+        description: 'Consider automatic compaction for one explicit trigger. Pressure policy uses the latest durable routed request, while context-overflow and loop- detection policy may force a useful balanced reduction even below the normal threshold. Return `null` when no safe range can be compacted. A single oversized retained unit or request envelope cannot be repaired through surface compaction.',
+        parameters: [{ name: 'agent', description: 'agent context owning the session surface and routing options.' }, { name: 'trigger', description: 'pressure, provider-confirmed context overflow, or loop detection.' }, { name: 'signal', description: 'cancellation signal; model-backed implementations must forward it.' }],
         returns: 'the compaction result, or `null` if no compaction was needed.',
       },
       {
@@ -3103,7 +3103,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'CompactionTrigger',
-    declaration: 'export type CompactionTrigger = \'pressure\' | \'context-overflow\';',
+    declaration: 'export type CompactionTrigger = \'pressure\' | \'context-overflow\' | \'loop-detection\';',
   },
   {
     name: 'ConfinedArgv',
@@ -3651,7 +3651,7 @@ export const TYPE_API: readonly TypeApiEntry[] = [
   },
   {
     name: 'LoopDetectionOptions',
-    declaration: 'export interface LoopDetectionOptions {\n    enabled?: boolean;\n    includeLoop?: boolean;\n    minTokens?: number;\n    firstPrompt?: string;\n    secondPrompt?: string;\n    thirdPrompt?: string;\n}',
+    declaration: 'export interface LoopDetectionOptions {\n    enabled?: boolean;\n    includeLoop?: boolean;\n    minTokens?: number;\n    firstPrompt?: string;\n    secondPrompt?: string;\n    thirdPrompt?: string;\n    compactBeforeFailing?: boolean;\n}',
   },
   {
     name: 'LspHover',

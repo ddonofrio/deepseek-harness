@@ -5,6 +5,17 @@ import SessionStore, { SessionId, TurnEndReason } from '@deepseek-ai/dsh-session
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime, { defineContentToolFixture } from '@deepseek-ai/dsh-tools'
 import AgentRegistry, { type Agent } from '@deepseek-ai/dsh-agent'
+import {
+  CompactionEngine,
+  CompactionId,
+  compactCheckpointSource,
+} from '@deepseek-ai/dsh-compaction'
+import type {
+  CompactionAgentContext,
+  CompactionResult,
+  CompactionTrigger,
+  ManualCompactAgentContext,
+} from '@deepseek-ai/dsh-compaction'
 
 import AgentLoop from '@deepseek-ai/dsh-agent-loop'
 import { MockAdapter, maxTokensResponse, textResponse, toolCallResponse } from './mock-adapter.ts'
@@ -73,6 +84,64 @@ function repeatedToolCallResponse(): StreamChunk[] {
   ]
 }
 
+/** Minimal active-turn compaction provider for loop-recovery coverage. */
+class LoopCompactionEngine extends CompactionEngine {
+  calls = 0
+  returnNull = false
+
+  override async compactIfNeeded(
+    agent: CompactionAgentContext,
+    trigger: CompactionTrigger,
+    _signal: AbortSignal,
+  ): Promise<CompactionResult | null> {
+    if (trigger !== 'loop-detection') throw new Error(`unexpected compaction trigger: ${trigger}`)
+    this.calls += 1
+    if (this.returnNull) return null
+    const start = agent.session.surface.nodes[0]
+    if (start === undefined) return null
+    const compactionId = CompactionId(`loop-compaction-${this.calls}`)
+    const summary = [{ type: 'text' as const, text: 'compacted context' }]
+    const startEvent = agent.session.append('compaction/start', { compactionId, turn: 1 })
+    const summaryEvent = agent.session.append('compaction/summary', {
+      compactionId,
+      summary,
+      shadowedRange: { start, end: start },
+      shadowedSeqs: [start],
+      shadowedTokenCount: 1,
+      provider: 'mock',
+      model: 'mock',
+    })
+    agent.session.append('user/message', {
+      ...createUserMessage({ content: summary, source: compactCheckpointSource(compactionId) }),
+    }, {
+      surfaceOp: { op: 'replace', start, end: start },
+      sourceEventSeqs: [startEvent.seq, summaryEvent.seq, start],
+    })
+    const endEvent = agent.session.append('compaction/end', { compactionId, turn: 1 })
+    return {
+      compactionId,
+      startSeq: startEvent.seq,
+      summarySeq: summaryEvent.seq,
+      endSeq: endEvent.seq,
+      summary,
+      shadowedRange: { start, end: start },
+      shadowedSeqs: [start],
+      shadowedTokenCount: 1,
+    }
+  }
+
+  override compactNow(
+    _agent: ManualCompactAgentContext,
+    _signal: AbortSignal,
+  ): Promise<CompactionResult | null> {
+    return Promise.resolve(null)
+  }
+
+  override compactRegion(): Promise<CompactionResult> {
+    return Promise.reject(new Error('loop test does not use compactRegion'))
+  }
+}
+
 describe('agent loop', () => {
   it('cuts a repeated model response and continues with the configured escalation prompts', async () => {
     const adapter = new MockAdapter([
@@ -127,6 +196,91 @@ describe('agent loop', () => {
       [{ type: 'text', text: '<You are in a loop, please output the response now>' }],
       [{ type: 'text', text: "<Please stop. Explain the user's current status; do not continue with your task>" }],
     ])
+  })
+
+  it('compacts and replays the loop-causing request before resetting detection', async () => {
+    const repeated = 'a b c d e a b c d e a b c d e'
+    const adapter = new MockAdapter([
+      textResponse(repeated),
+      textResponse(repeated),
+      textResponse(repeated),
+      textResponse(repeated),
+      textResponse(repeated),
+      textResponse('recovered'),
+    ])
+    const ctx = await harness(adapter)
+    const compaction = new LoopCompactionEngine(ctx)
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-compact-before-failing'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true, compactBeforeFailing: true },
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(compaction.calls).toBe(1)
+    expect(adapter.requests).toHaveLength(6)
+    expect(adapter.requests[4]?.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: "<Please stop. Explain the user's current status; do not continue with your task>" }],
+    })
+    expect(adapter.requests[5]?.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: [{ type: 'text', text: '<continue>' }],
+    })
+    expect(agent.session.events.filter(event => event.type === 'compaction/end')).toHaveLength(1)
+    expect(agent.session.events.at(-1)).toMatchObject({
+      type: 'turn/end',
+      data: { reason: { kind: 'completed' } },
+    })
+  })
+
+  it('keeps the loop failure when compaction has no useful range', async () => {
+    const repeated = 'a b c d e a b c d e a b c d e'
+    const adapter = new MockAdapter([
+      textResponse(repeated), textResponse(repeated), textResponse(repeated), textResponse(repeated),
+    ])
+    const ctx = await harness(adapter)
+    const compaction = new LoopCompactionEngine(ctx)
+    compaction.returnNull = true
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-no-compaction-range'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true, compactBeforeFailing: true },
+    })
+    const errors: unknown[] = []
+    ctx.on('agent/error', ({ agent: subject, error }) => {
+      if (subject === agent) errors.push(error)
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(compaction.calls).toBe(1)
+    expect(errors[0]).toMatchObject({ message: 'LLM in infinite loop.', code: 'LLM_LOOP' })
+  })
+
+  it('keeps the loop failure when no compaction provider is installed', async () => {
+    const repeated = 'a b c d e a b c d e a b c d e'
+    const adapter = new MockAdapter([
+      textResponse(repeated), textResponse(repeated), textResponse(repeated), textResponse(repeated),
+    ])
+    const ctx = await harness(adapter)
+    const agent = ctx.agentLoop.create(SessionId('llm-loop-no-compaction-provider'), {
+      provider: 'mock',
+      model: 'mock',
+      loopDetection: { enabled: true, compactBeforeFailing: true },
+    })
+    const errors: unknown[] = []
+    ctx.on('agent/error', ({ agent: subject, error }) => {
+      if (subject === agent) errors.push(error)
+    })
+
+    send(agent, 'answer this')
+    await waitForIdle(ctx, agent)
+
+    expect(errors[0]).toMatchObject({ message: 'LLM in infinite loop.', code: 'LLM_LOOP' })
   })
 
   it('can omit the partial loop and use custom escalation prompts', async () => {

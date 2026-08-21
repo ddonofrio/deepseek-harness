@@ -33,6 +33,7 @@ import type { EpochHeader, RequestContext, Session, SessionId, TurnEndReason, Us
 import { canonicalHeader, headerEquals } from '@deepseek-ai/dsh-session'
 import { joinContextSections, renderContextSections, renderPrompt } from '@deepseek-ai/dsh-system-prompt'
 import type { PromptAssembly } from '@deepseek-ai/dsh-system-prompt'
+import type {} from '@deepseek-ai/dsh-compaction'
 import type { Context } from '@deepseek-ai/cordis'
 import { RuntimeContextProjection } from './runtime-context.ts'
 import { executeToolCalls } from './tool-calls.ts'
@@ -65,6 +66,7 @@ interface ResolvedLoopDetectionOptions {
   firstPrompt: string
   secondPrompt: string
   thirdPrompt: string
+  compactBeforeFailing: boolean
 }
 
 function resolveLoopDetection(options: LoopDetectionOptions | undefined): ResolvedLoopDetectionOptions {
@@ -75,6 +77,7 @@ function resolveLoopDetection(options: LoopDetectionOptions | undefined): Resolv
     firstPrompt: options?.firstPrompt ?? DEFAULT_LOOP_FIRST_PROMPT,
     secondPrompt: options?.secondPrompt ?? DEFAULT_LOOP_SECOND_PROMPT,
     thirdPrompt: options?.thirdPrompt ?? DEFAULT_LOOP_THIRD_PROMPT,
+    compactBeforeFailing: options?.compactBeforeFailing ?? false,
   }
 }
 
@@ -418,6 +421,17 @@ export class ReactLoopAgent implements Agent {
         if (detectedLoop !== undefined) {
           this.consecutiveLoopDetections += 1
           if (this.consecutiveLoopDetections >= 4) {
+            if (this.loopDetection.compactBeforeFailing) {
+              const compaction = this.loopCtx.get('compaction')
+              if (compaction !== undefined) {
+                const compacted = await compaction.compactIfNeeded(this, 'loop-detection', signal) !== null
+                signal.throwIfAborted()
+                if (compacted) {
+                  this.consecutiveLoopDetections = 0
+                  continue
+                }
+              }
+            }
             throw new LlmError('LLM in infinite loop.', 'LLM_LOOP')
           }
           if (this.loopDetection.includeLoop && assembler.blocks().length > 0) {

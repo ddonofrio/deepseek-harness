@@ -122,6 +122,40 @@ export function SelectField(props: FieldProps & {
   )
 }
 
+/** A staged checkbox for a boolean setting stored as `on` or `off` text. */
+export function CheckboxField(props: FieldProps) {
+  return (
+    <div className={css.field}>
+      <div className={css.head}>
+        <label className={css.checkboxLabel} htmlFor={props.id}>
+          <input
+            id={props.id}
+            className={css.checkbox}
+            type="checkbox"
+            checked={props.text === 'on'}
+            disabled={props.disabled}
+            onChange={(event) => { props.onEdit(event.target.checked ? 'on' : 'off') }}
+          />
+          {props.label}
+        </label>
+        {props.overridden
+          ? (
+            <span className={css.badges}>
+              <span className={css.badge}>{props.overriddenLabel}</span>
+              <button type="button" className={css.reset} disabled={props.disabled} onClick={props.onReset}>
+                {props.resetLabel}
+              </button>
+            </span>
+          )
+          : null}
+      </div>
+      <p className={props.invalid ? css.invalid : css.hint}>
+        {props.invalid ? props.invalidLabel : props.hint}
+      </p>
+    </div>
+  )
+}
+
 /** A staged multiline prompt field. */
 export function TextAreaField(props: FieldProps) {
   return (

@@ -78,6 +78,7 @@ describe('agent-loop settings section', () => {
       'loopDetectionFirstPrompt',
       'loopDetectionSecondPrompt',
       'loopDetectionThirdPrompt',
+      'loopDetectionCompactBeforeFailing',
     ])
     await bench.ctx.fiber.dispose()
   })
@@ -100,6 +101,7 @@ describe('agent-loop settings section', () => {
       loopDetectionFirstPrompt: 'first',
       loopDetectionSecondPrompt: 'second',
       loopDetectionThirdPrompt: 'third',
+      loopDetectionCompactBeforeFailing: true,
     })
 
     const agent = bench.ctx.agentLoop.create(SessionId('settings-loop-agent'), {
@@ -113,6 +115,7 @@ describe('agent-loop settings section', () => {
       firstPrompt: 'first',
       secondPrompt: 'second',
       thirdPrompt: 'third',
+      compactBeforeFailing: true,
     })
     await bench.ctx.fiber.dispose()
   })

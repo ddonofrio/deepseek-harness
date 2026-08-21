@@ -11,6 +11,7 @@ export type PluginsSettingsLocaleKey =
   | 'loopDetectionTitle' | 'loopDetectionDescription' | 'loopDetectionEnabled' | 'loopDetectionIncludeLoop'
   | 'loopDetectionMinTokens' | 'loopDetectionMinTokensHint' | 'loopDetectionFirstPrompt'
   | 'loopDetectionSecondPrompt' | 'loopDetectionThirdPrompt' | 'loopDetectionPromptHint'
+  | 'loopDetectionCompactBeforeFailing' | 'loopDetectionCompactBeforeFailingHint'
   | 'loopDetectionOn' | 'loopDetectionOff' | 'loopDetectionYes' | 'loopDetectionNo'
   | 'tokenLimitHandlerTitle' | 'tokenLimitHandlerDescription' | 'tokenLimitHandlerAction'
   | 'tokenLimitHandlerActionHint' | 'tokenLimitHandlerContinue' | 'tokenLimitHandlerStop'
@@ -59,6 +60,8 @@ export const en: Record<PluginsSettingsLocaleKey, string> = {
   loopDetectionSecondPrompt: 'Second recovery prompt',
   loopDetectionThirdPrompt: 'Third recovery prompt',
   loopDetectionPromptHint: 'Sent as the next user message after a consecutive loop detection.',
+  loopDetectionCompactBeforeFailing: 'Compact before failing',
+  loopDetectionCompactBeforeFailingHint: 'After three recovery prompts, compact the conversation and retry the request before reporting an infinite loop.',
   loopDetectionOn: 'On',
   loopDetectionOff: 'Off',
   loopDetectionYes: 'Yes',
@@ -125,6 +128,8 @@ export const zh: Record<PluginsSettingsLocaleKey, string> = {
   loopDetectionSecondPrompt: '第二次恢复提示词',
   loopDetectionThirdPrompt: '第三次恢复提示词',
   loopDetectionPromptHint: '每次连续检测到循环后，作为下一条用户消息发送。',
+  loopDetectionCompactBeforeFailing: '在失败前压缩上下文',
+  loopDetectionCompactBeforeFailingHint: '三次恢复提示词后，先压缩对话并重试请求，再报告无限循环。',
   loopDetectionOn: '开',
   loopDetectionOff: '关',
   loopDetectionYes: '是',
