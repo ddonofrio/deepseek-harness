@@ -2,6 +2,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import type {
   ConversationLocation, ConversationNodeDefinition, ModelRetryNode,
 } from '@deepseek-ai/dsh-client-runtime/client'
+import { displayFailureMessage } from '@deepseek-ai/dsh-client-runtime/client'
 import type {} from '@deepseek-ai/dsh-llm-retry/types'
 import type { RetryChatData } from '../contract/chat-nodes.ts'
 import { chatNode } from './common.ts'
@@ -22,12 +23,14 @@ export interface RetryState {
 
 function scheduledNode(match: Parameters<ConversationNodeDefinition['start']>[1]): ModelRetryNode | undefined {
   if (match.event.type !== 'llm/retry') return undefined
+  const { failure, ...retry } = match.event.data
   return {
     kind: 'model-retry',
     seq: match.event.seq,
     time: match.event.time,
     retryState: 'scheduled',
-    ...match.event.data,
+    ...retry,
+    failure: { ...failure, message: displayFailureMessage(failure) },
   }
 }
 

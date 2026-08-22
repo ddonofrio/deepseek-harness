@@ -70,6 +70,13 @@ const EXCEEDS_MODEL_CONTEXT = new RegExp(
   'i',
 )
 
+/** Provider wording that reports the measured message size beside its context bound. */
+const MEASURED_MESSAGE_CONTEXT_OVERFLOW = new RegExp(
+  String.raw`\b(?:message|prompt|input|request)\s+too\s+(?:long|large)\b.{0,120}`
+  + String.raw`\b\d[\d,]*[-\s]+token(?:s)?\s+context\s+window\b`,
+  'i',
+)
+
 /**
  * Recognize the context-overflow wording used by OpenAI-compatible providers
  * and library adapters. Adapters pass all available provider code, type, and
@@ -83,6 +90,7 @@ export function isContextWindowExceededError(detail: string): boolean {
     || TOO_LARGE_FOR_CONTEXT.test(detail)
     || /\b(?:input|prompt|request)\s+(?:is\s+)?too\s+(?:long|large)\s+for\s+(?:this|the)\s+model\b/i.test(detail)
     || EXCEEDS_MODEL_CONTEXT.test(detail)
+    || MEASURED_MESSAGE_CONTEXT_OVERFLOW.test(detail)
 }
 
 /**

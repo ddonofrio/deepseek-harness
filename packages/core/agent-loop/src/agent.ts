@@ -462,6 +462,27 @@ export class ReactLoopAgent implements Agent {
       const { request, preparedCall } = await this.buildRequest(
         turn, step, assembly.tools, system, this.session.deriveMessages(), signal,
       )
+      if (preparedCall?.context?.contextWindow !== undefined) {
+        const compaction = this.ctx.get('compaction')
+          ?? (this.loopCtx.reflect.get('agentPresets') as AgentPresetServiceLookup | undefined)
+            ?.serviceFor(this, 'compaction')
+        if (compaction !== undefined) {
+          const generation = this.session.surface.replaceGeneration
+          try {
+            // The pre-step pressure check runs before the current messages are
+            // durable. This check prices the complete request and rebuilds it
+            // when compaction changes the durable surface.
+            const result = await compaction.compactIfNeeded(this, 'pressure', signal)
+            if (result !== null || this.session.surface.replaceGeneration > generation) continue
+          } catch (error: unknown) {
+            signal.throwIfAborted()
+            if (this.session.surface.replaceGeneration > generation) continue
+            this.loopCtx.logger.warn(
+              `request compaction failed: ${error instanceof Error ? error.message : String(error)}; continuing the request`,
+            )
+          }
+        }
+      }
       const assembler = new BlockAssembler()
       const chunkSeqs: number[] = []
       const requestAbort = new AbortController()

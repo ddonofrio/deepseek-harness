@@ -1229,6 +1229,9 @@ describe('DeepSeekAdapter against a mock server', () => {
   it('classifies only context-capacity HTTP 400 details as context overflow', () => {
     expect(httpErrorCode(400, { message: 'request too large for model context' }))
       .toBe(CONTEXT_WINDOW_EXCEEDED_CODE)
+    expect(httpErrorCode(400, {
+      message: 'Message too long: 131086 tokens exceeds the 131072-token context window.',
+    })).toBe(CONTEXT_WINDOW_EXCEEDED_CODE)
     expect(httpErrorCode(400, { message: 'invalid input: temperature exceeds maximum allowed value' }))
       .toBe('INVALID_REQUEST')
     expect(httpErrorCode(413, { code: 'context_length_exceeded' })).toBe('INVALID_REQUEST')

@@ -91,7 +91,7 @@ class OverflowRecoveryAdapter extends LlmAdapter {
       provider,
       id: model,
       name: model,
-      context: { contextWindow: 128 },
+      context: { contextWindow: 100_000 },
     })
   }
 
@@ -163,13 +163,15 @@ async function harness(toolSteps: number): Promise<{ ctx: Context; compact: Repr
   }))
   // Small window so several tool steps cross the threshold and compaction
   // fires within the runaway turn after enough history can shrink.
-  const compact = new ReproCompactionEngine(ctx, {
+  await ctx.plugin(ReproCompactionEngine, {
     auto: true,
     thresholdRatio: 0.5,
     retainTokens: 50,
     maxTokens: 8192,
     compactionRetries: 1,
   })
+  const compact = ctx.get('compaction')
+  if (!(compact instanceof ReproCompactionEngine)) throw new Error('expected the repro compaction engine to be registered')
   return { ctx, compact }
 }
 
@@ -266,6 +268,30 @@ describe('CBR-001: a real-loop checkpoint is a valid boundary on both sides', ()
       expect(precedingResult.seq).toBeLessThan(compactStart!.seq)
       expect(precedingStepEnd!.seq).toBeLessThan(compactStart!.seq)
       expect(compactStart!.seq).toBeLessThan(nextStepStart!.seq)
+    } finally {
+      await ctx.fiber.dispose()
+    }
+  })
+
+  it('checks pressure again after the current step input is durable', async () => {
+    const { ctx } = await harness(0)
+    try {
+      const { agent } = await ctx.agentLoop.createAgent(ctx, {
+        sessionId: SessionId('current-input-pressure'),
+        seed: overflowHistorySeed(),
+        agentOptions: { provider: 'mock', model: 'mock' },
+      })
+      agent.followup(createUserMessage({
+        content: [{ type: 'text', text: 'current request '.repeat(200) }],
+        source: { kind: 'user' },
+      }))
+      await waitForIdle(ctx, agent)
+
+      expect(agent.session.events.some(event => event.type === 'compaction/summary')).toBe(true)
+      expect(agent.session.events.at(-1)).toMatchObject({
+        type: 'turn/end',
+        data: { reason: { kind: 'completed' } },
+      })
     } finally {
       await ctx.fiber.dispose()
     }

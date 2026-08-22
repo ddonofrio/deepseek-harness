@@ -581,12 +581,16 @@ describe('ChatView', () => {
   })
 
   it('renders terminal turn failures inline with their durable message and optional code', () => {
-    const h = makeHarness({ nodes: [user(1, 'try'), turnError(2, 'AUTH'), turnError(3)] })
+    const h = makeHarness({ nodes: [user(1, 'try'), turnError(2, 'AUTH'), turnError(3), {
+      ...turnError(4, 'CONTEXT_WINDOW_EXCEEDED'),
+      message: 'Message too long: 131086 tokens exceeds the 131072-token context window.',
+    }] })
     const view = render(<h.ChatView {...h.props} />)
     const statuses = view.getAllByRole('status')
     expect(statuses.map(status => status.textContent)).toEqual([
       '本轮运行失败API key is invalidAUTH',
       '本轮运行失败plugin exploded',
+      '本轮运行失败对话内容过多，无法继续。请开始新对话。CONTEXT_WINDOW_EXCEEDED',
     ])
   })
 

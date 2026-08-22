@@ -756,6 +756,31 @@ describe('built-in conversation node Definitions', () => {
     expect(snapshot(compactions).nodes.values().filter(candidate => candidate.kind === 'compaction')).toHaveLength(1)
   })
 
+  it('does not project provider context-overflow details into retry rows', () => {
+    const retry = assembler([
+      at(1, 'turn/start', { turn: 1 }),
+      at(2, 'step/start', { turn: 1, step: 1 }),
+      at(3, 'llm/retry', {
+        retryId: 'overflow-retry',
+        turn: 1,
+        step: 1,
+        provider: 'fake',
+        mode: 'normal',
+        policyKey: 'fake-normal',
+        retry: 1,
+        maxRetries: 1,
+        delayMs: 10,
+        failure: {
+          code: 'CONTEXT_WINDOW_EXCEEDED',
+          message: 'Message too long: 131086 tokens exceeds the 131072-token context window.',
+        },
+      }),
+    ])
+    const retryNode = node(snapshot(retry), 'model-retry')
+    expect((retryNode?.data as RetryChatData).current.failure.message)
+      .toBe('The conversation is too large to continue. Start a new conversation.')
+  })
+
   it('fills a landed compaction marker when an older page supplies its summary', () => {
     const value = assembler([
       at(13, 'user/message', {

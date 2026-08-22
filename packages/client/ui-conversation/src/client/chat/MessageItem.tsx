@@ -117,12 +117,15 @@ function TurnErrorItem({ node, t }: {
   node: TurnErrorNode
   t: ChatViewSlotProps['t']
 }) {
+  const message = node.code === 'CONTEXT_WINDOW_EXCEEDED'
+    ? t('message.contextOverflow')
+    : node.message
   return (
     <div className={css.turnErrorRow} role="status">
       <StateDot state="error" className={css.turnErrorDot} />
       <div className={css.turnErrorCopy}>
         <span className={css.turnErrorTitle}>{t('message.turnError')}</span>
-        <span className={css.turnErrorMessage}>{node.message}</span>
+        <span className={css.turnErrorMessage}>{message}</span>
       </div>
       {node.code !== undefined && <code className={css.turnErrorCode}>{node.code}</code>}
     </div>
