@@ -199,8 +199,8 @@ describe('agent loop', () => {
     expect(adapter.requests).toHaveLength(4)
     expect(adapter.requests.slice(1).map(request => request.messages.at(-1)?.content)).toEqual([
       [{ type: 'text', text: '<continue>' }],
-      [{ type: 'text', text: '<You are in a loop, please output the response now>' }],
-      [{ type: 'text', text: "<Please stop. Explain the user's current status; do not continue with your task>" }],
+      [{ type: 'text', text: 'THIS IS A SYSTEM MESSAGE: <You are in an LLM loop; please output the response now>' }],
+      [{ type: 'text', text: 'THIS IS A SYSTEM MESSAGE: <Please stop. Explain to the user, in detail, the current status, what you have done, and what is missing; do not continue with your task>' }],
     ])
     expect(adapter.requests.slice(1).map(request => request.messages.at(-1)?.role)).toEqual([
       'user', 'user', 'user',

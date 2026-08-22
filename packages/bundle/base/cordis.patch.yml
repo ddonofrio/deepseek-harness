@@ -403,7 +403,7 @@
       name: '@deepseek-ai/dsh-completion-checker'
       config:
         enabled: true
-        provider: fork
+        provider: spawn
 
     # Every mode enables the stable model-facing web_search tool. DeepSeek search
     # resolves the same DEEPSEEK_API_KEY credential the Models page manages for

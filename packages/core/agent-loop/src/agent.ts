@@ -56,8 +56,8 @@ type PreparedStep =
   | { kind: 'enter'; messages: UserMessage[]; assembly: PromptAssembly }
 
 const DEFAULT_LOOP_FIRST_PROMPT = '<continue>'
-const DEFAULT_LOOP_SECOND_PROMPT = '<You are in a loop, please output the response now>'
-const DEFAULT_LOOP_THIRD_PROMPT = "<Please stop. Explain the user's current status; do not continue with your task>"
+const DEFAULT_LOOP_SECOND_PROMPT = 'THIS IS A SYSTEM MESSAGE: <You are in an LLM loop; please output the response now>'
+const DEFAULT_LOOP_THIRD_PROMPT = 'THIS IS A SYSTEM MESSAGE: <Please stop. Explain to the user, in detail, the current status, what you have done, and what is missing; do not continue with your task>'
 
 interface ResolvedLoopDetectionOptions {
   enabled: boolean
@@ -101,7 +101,7 @@ function resolveLoopDetection(options: LoopDetectionOptions | undefined): Resolv
   return {
     enabled: options?.enabled ?? false,
     includeLoop: options?.includeLoop ?? true,
-    minTokens: options?.minTokens ?? 5,
+    minTokens: options?.minTokens ?? 16,
     firstPrompt: options?.firstPrompt ?? DEFAULT_LOOP_FIRST_PROMPT,
     secondPrompt: options?.secondPrompt ?? DEFAULT_LOOP_SECOND_PROMPT,
     thirdPrompt: options?.thirdPrompt ?? DEFAULT_LOOP_THIRD_PROMPT,

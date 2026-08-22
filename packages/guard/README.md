@@ -8,7 +8,7 @@ Behavioral guard plugins watch the agent loop for unproductive patterns and enfo
 |---|---|---|
 | [`repeat-tool-reminder/`](repeat-tool-reminder/README.md) | Advisory reminders for repeated tool calls | listens on tool and agent events |
 | [`token-limit-handler/`](token-limit-handler/README.md) | Recovery policy for output-token limits | listens on `agent/turn-stopping` |
-| [`completion-checker/`](completion-checker/README.md) | Reviews completed turns and requests missing work | listens on `agent/turn-stopping`, starts a forked subagent |
+| [`completion-checker/`](completion-checker/README.md) | Reviews completed turns and requests missing work | listens on `agent/turn-stopping`, starts a fresh subagent |
 | [`timeout-policy/`](timeout-policy/README.md) | Arms per-call tool deadlines as deployment policy | registers a `tools/execute` listener |
 
 Reminders travel as `additionalContexts` on the `tools/post-execute` decision and are appended as logged plugin-sourced `user/message` events ([tools](../../docs/subsystems/tools.md)); the timeout split across `dsh-timeout`, capability termination, and this policy layer is recorded in the [timeout-library Agent Note](../../.agents/notes/implemented/architecture/2026-07-06-timeout-deadline-library.md).

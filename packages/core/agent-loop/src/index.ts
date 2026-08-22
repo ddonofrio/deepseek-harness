@@ -145,8 +145,8 @@ const DEFAULT_LOOP_DETECTION: Required<LoopDetectionOptions> = {
   includeLoop: true,
   minTokens: 16,
   firstPrompt: '<continue>',
-  secondPrompt: '<You are in a loop, please output the response now>',
-  thirdPrompt: "<Please stop. Explain the user's current status; do not continue with your task>",
+  secondPrompt: 'THIS IS A SYSTEM MESSAGE: <You are in an LLM loop; please output the response now>',
+  thirdPrompt: 'THIS IS A SYSTEM MESSAGE: <Please stop. Explain to the user, in detail, the current status, what you have done, and what is missing; do not continue with your task>',
   compactBeforeFailing: false,
 }
 
@@ -387,10 +387,10 @@ export class AgentLoop extends Service implements AgentFactory {
       loopDetection: z.object({
         enabled: z.boolean().default(false),
         includeLoop: z.boolean().default(true),
-        minTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(5),
+        minTokens: z.number().step(1).min(1).max(Number.MAX_SAFE_INTEGER).default(16),
         firstPrompt: z.string().default('<continue>'),
-        secondPrompt: z.string().default('<You are in a loop, please output the response now>'),
-        thirdPrompt: z.string().default("<Please stop. Explain the user's current status; do not continue with your task>"),
+        secondPrompt: z.string().default('THIS IS A SYSTEM MESSAGE: <You are in an LLM loop; please output the response now>'),
+        thirdPrompt: z.string().default('THIS IS A SYSTEM MESSAGE: <Please stop. Explain to the user, in detail, the current status, what you have done, and what is missing; do not continue with your task>'),
         compactBeforeFailing: z.boolean().default(false),
       }),
       cwd: z.string(),

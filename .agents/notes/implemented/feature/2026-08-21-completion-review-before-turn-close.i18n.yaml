@@ -2,5 +2,5 @@
 # side as of the last confirmed-consistent state. Both languages carry equal authority;
 # after editing either side, bring the other along and re-record with:
 #   pnpm run verify-translation-pairing --write .agents/notes/implemented/feature/2026-08-21-completion-review-before-turn-close.md
-2026-08-21-completion-review-before-turn-close.md: 9ea2503896b99b014fa7f85299654296552c9003
-2026-08-21-completion-review-before-turn-close.zh.md: 4c71d0f26555dfd1669f88ddab62e7acb7f21147
+2026-08-21-completion-review-before-turn-close.md: 3bea38640dadea92b4ecf01267aef96e5f14db40
+2026-08-21-completion-review-before-turn-close.zh.md: 3ffa51d60ba8fd95fed1ea334269d8530cfefaa1
